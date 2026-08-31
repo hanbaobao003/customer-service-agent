@@ -96,7 +96,7 @@ tests/integration/postgres/test_sql_readonly.py
 - Produces: `OrderService.get_order(context, order_id)`。
 - Produces: 模型工具 `get_order(order_id)`，schema 中没有 `customer_id`。
 
-- [ ] **Step 1: 写越权不可观察和 schema RED**
+- [x] **Step 1: 写越权不可观察和 schema RED**
 
   ```python
   async def test_other_customer_order_is_indistinguishable_from_missing():
@@ -108,19 +108,19 @@ tests/integration/postgres/test_sql_readonly.py
 
   契约断言 `get_order` 模型参数只有 `order_id`，返回摘要带状态、版本和查询时间，artifact 不含完整地址/电话。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_access.py tests/contract/test_order_tools.py -q`
 
-- [ ] **Step 3: 实现客户作用域端口和摘要映射**
+- [x] **Step 3: 实现客户作用域端口和摘要映射**
 
   repository 协议不提供无客户参数的 `get_by_id`。工具从 `ToolRuntime.context` 取 `customer_id`，把完整脱敏实体放 artifact，模型 content 只放客服摘要。
 
-- [ ] **Step 4: 运行 GREEN**
+- [x] **Step 4: 运行 GREEN**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_access.py tests/contract/test_order_tools.py -q`
 
-- [ ] **Step 5: 提交订单读取边界**
+- [x] **Step 5: 提交订单读取边界**
 
   Commit: `feat: isolate order reads by trusted customer`
 
