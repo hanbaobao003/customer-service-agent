@@ -122,3 +122,12 @@ LangGraph PostgreSQL checkpointer 使用官方 `langgraph-checkpoint-postgres` �
 - DG-001 版本整组已批准，M1 可以按批准版本创建 `pyproject.toml` 和锁文件。
 - DG-006 资源规则已批准，首次 L3 测试仍必须在创建资源前验证安全前缀、`test_run_id` 和资源归属。
 - M0 没有剩余阻塞；尚未开始 M1，也未创建业务代码或安装 Python 依赖。
+
+## 9. M3 SQL 执行参数补充批准
+
+2026-09-01，用户在参数候选后以“继续”批准以下受控 SQL 参数：
+
+- 最大模型可见返回行数：`50`；
+- PostgreSQL `statement_timeout`：`2000 ms`。
+
+参数写入 `src/customer_service_agent/config.py`。单元测试可使用更小的显式值验证边界；生产组装必须使用上述批准值，变更时需再次记录用户批准。

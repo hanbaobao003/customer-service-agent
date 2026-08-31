@@ -6,6 +6,7 @@ from decimal import Decimal
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from pydantic_core import to_jsonable_python
 
 from customer_service_agent.commerce.orders import (
     OperationHashMismatch,
@@ -19,6 +20,7 @@ from customer_service_agent.commerce.orders import (
     OrderVersionConflict,
     ReturnRequest,
 )
+from customer_service_agent.commerce.sql import SqlTimeout, ValidatedQuery
 
 
 SCHEMA = (
@@ -90,7 +92,85 @@ SCHEMA = (
         created_at timestamptz NOT NULL DEFAULT now()
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS catalog_products_data (
+        product_id text PRIMARY KEY,
+        product_name text NOT NULL,
+        unit_price numeric NOT NULL,
+        currency text NOT NULL,
+        active boolean NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS catalog_promotions_data (
+        promotion_id text PRIMARY KEY,
+        promotion_name text NOT NULL,
+        description text NOT NULL,
+        active boolean NOT NULL
+    )
+    """,
+    """
+    CREATE OR REPLACE VIEW customer_orders AS
+    SELECT order_id, customer_id, status, currency, total_amount,
+           created_at, updated_at, version
+    FROM orders
+    """,
+    """
+    CREATE OR REPLACE VIEW customer_order_items AS
+    SELECT item.order_id, parent.customer_id, item.product_id,
+           item.product_name_snapshot, item.unit_price, item.quantity
+    FROM order_items AS item
+    JOIN orders AS parent ON parent.order_id = item.order_id
+    """,
+    """
+    CREATE OR REPLACE VIEW customer_return_requests AS
+    SELECT return_id, order_id, customer_id, reason_code, status,
+           refund_status, created_at, updated_at
+    FROM return_requests
+    """,
+    """
+    CREATE OR REPLACE VIEW catalog_products AS
+    SELECT product_id, product_name, unit_price, currency
+    FROM catalog_products_data
+    WHERE active
+    """,
+    """
+    CREATE OR REPLACE VIEW catalog_promotions AS
+    SELECT promotion_id, promotion_name, description
+    FROM catalog_promotions_data
+    WHERE active
+    """,
 )
+
+
+class PostgresSqlReader:
+    def __init__(self, dsn: str) -> None:
+        self._dsn = dsn
+
+    async def execute_readonly(
+        self,
+        query: ValidatedQuery,
+        *,
+        timeout_ms: int,
+    ) -> list[dict[str, object]]:
+        if timeout_ms <= 0:
+            raise ValueError("timeout_ms must be positive")
+        try:
+            connection = await psycopg.AsyncConnection.connect(
+                self._dsn,
+                row_factory=dict_row,
+            )
+            await connection.set_read_only(True)
+            async with connection:
+                await connection.execute(
+                    "SELECT set_config('statement_timeout', %s, true)",
+                    (f"{timeout_ms}ms",),
+                )
+                cursor = await connection.execute(query.sql, query.parameters)
+                rows = await cursor.fetchall()
+        except psycopg.errors.QueryCanceled as exc:
+            raise SqlTimeout("business query timed out") from exc
+        return to_jsonable_python(rows)
 
 
 class PostgresCommerceStore:

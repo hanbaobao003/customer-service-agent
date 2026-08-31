@@ -1,6 +1,7 @@
 """Shared pytest boundaries for deterministic default test runs."""
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 import os
 import secrets
 import subprocess
@@ -27,11 +28,19 @@ EXTERNAL_ACCESS_MARKERS = {
 ExternalAccessBlocked = SocketBlockedError
 POSTGRES_CONTAINER = "shared-postgres"
 POSTGRES_RESOURCE_PREFIX = "wang_agent_orders_test_"
+POSTGRES_SQL_RESOURCE_PREFIX = "wang_agent_sql_test_"
 
 
 class SecretDsn(str):
     def __repr__(self) -> str:
         return "<redacted-postgres-dsn>"
+
+
+@dataclass(frozen=True)
+class PostgresSqlDsns:
+    owner: SecretDsn
+    reader: SecretDsn
+    reader_role: str
 
 
 class ExternalAccessGuard:
@@ -80,6 +89,16 @@ def _postgres_resource_name(kind: str, run_id: str) -> str:
     ):
         raise ValueError("test_run_id must be 12 lowercase hexadecimal characters")
     return f"{POSTGRES_RESOURCE_PREFIX}{kind}_{run_id}"
+
+
+def _postgres_sql_resource_name(kind: str, run_id: str) -> str:
+    if kind not in {"db", "owner", "reader"}:
+        raise ValueError("SQL resource kind must be db, owner, or reader")
+    if len(run_id) != 12 or any(
+        character not in "0123456789abcdef" for character in run_id
+    ):
+        raise ValueError("test_run_id must be 12 lowercase hexadecimal characters")
+    return f"{POSTGRES_SQL_RESOURCE_PREFIX}{kind}_{run_id}"
 
 
 def _postgres_admin_sql(sql: str) -> None:
@@ -139,4 +158,56 @@ def postgres_dsn() -> Iterator[str]:
         _postgres_admin_sql(
             f"DROP DATABASE {database} WITH (FORCE);\n"
             f"DROP ROLE {role};\n"
+        )
+
+
+@pytest.fixture
+def postgres_sql_dsns() -> Iterator[PostgresSqlDsns]:
+    status = subprocess.run(
+        [
+            "docker",
+            "inspect",
+            "-f",
+            "{{.State.Running}}",
+            POSTGRES_CONTAINER,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if status.returncode != 0 or status.stdout.strip() != "true":
+        pytest.fail(
+            f"approved PostgreSQL container {POSTGRES_CONTAINER!r} is not running"
+        )
+
+    run_id = uuid.uuid4().hex[:12]
+    database = _postgres_sql_resource_name("db", run_id)
+    owner = _postgres_sql_resource_name("owner", run_id)
+    reader = _postgres_sql_resource_name("reader", run_id)
+    owner_password = secrets.token_hex(24)
+    reader_password = secrets.token_hex(24)
+    _postgres_admin_sql(
+        f"CREATE ROLE {owner} LOGIN PASSWORD '{owner_password}';\n"
+        f"CREATE ROLE {reader} LOGIN PASSWORD '{reader_password}';\n"
+        f"CREATE DATABASE {database} OWNER {owner};\n"
+        f"GRANT CONNECT ON DATABASE {database} TO {reader};\n"
+    )
+    try:
+        yield PostgresSqlDsns(
+            owner=SecretDsn(
+                f"postgresql://{owner}:{owner_password}@127.0.0.1:5432/{database}"
+            ),
+            reader=SecretDsn(
+                f"postgresql://{reader}:{reader_password}@127.0.0.1:5432/{database}"
+            ),
+            reader_role=reader,
+        )
+    finally:
+        assert database == _postgres_sql_resource_name("db", run_id)
+        assert owner == _postgres_sql_resource_name("owner", run_id)
+        assert reader == _postgres_sql_resource_name("reader", run_id)
+        _postgres_admin_sql(
+            f"DROP DATABASE {database} WITH (FORCE);\n"
+            f"DROP ROLE {reader};\n"
+            f"DROP ROLE {owner};\n"
         )

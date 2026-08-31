@@ -218,7 +218,7 @@ tests/integration/postgres/test_sql_readonly.py
 - Produces: `SqlGuard.validate(sql, allowed_relations) -> ValidatedQuery`。
 - Produces: `SqlQueryService.execute(context, proposed_sql) -> SqlResult`。
 
-- [ ] **Step 1: 写危险 SQL 和客户参数 RED**
+- [x] **Step 1: 写危险 SQL 和客户参数 RED**
 
   ```python
   @pytest.mark.parametrize("sql", [
@@ -234,15 +234,15 @@ tests/integration/postgres/test_sql_readonly.py
 
   另测模型 SQL 中出现客户字面量不能覆盖可信参数，未知表/函数/系统目录被拒绝。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_sql_guard.py tests/contract/test_sql_tool.py -q`
 
-- [ ] **Step 3: 实现 AST 流水线和参数化执行**
+- [x] **Step 3: 实现 AST 流水线和参数化执行**
 
   流水线固定为：解析单 statement → 根节点 SELECT → 禁止节点扫描 → relation/function 白名单 → 客户视图要求 → 应用层 LIMIT 上限 → 参数化可信客户 → 只读事务与 statement timeout。解析失败返回稳定错误，不静默重写再执行。
 
-- [ ] **Step 4: 运行 GREEN 与只读角色集成**
+- [x] **Step 4: 运行 GREEN 与只读角色集成**
 
   Unit/contract: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_sql_guard.py tests/contract/test_sql_tool.py -q`
 
@@ -250,7 +250,7 @@ tests/integration/postgres/test_sql_readonly.py
 
   集成断言只读角色无法写表、客户视图只返回当前客户、LIMIT 和 timeout 生效。
 
-- [ ] **Step 5: 提交受控 SQL**
+- [x] **Step 5: 提交受控 SQL**
 
   Commit: `feat: add AST-guarded readonly business queries`
 
