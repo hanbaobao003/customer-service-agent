@@ -1,6 +1,6 @@
 # 检索与索引规格
 
-**状态：** 已批准设计，实施中（Task 1 已完成）
+**状态：** 已批准设计，实施中（M4 Task 2 纯函数已完成；Milvus 集成受 DG-004 阻塞）
 
 **版本：** 1.1
 
@@ -95,7 +95,7 @@ Milvus collection 必须同时支持 BGE-M3 稠密表示与 BM25/稀疏表示。
 | RET-HYB-001 | `search_product_faq` 只能检索商品与 FAQ collection。 |
 | RET-HYB-002 | 稠密与 BM25 两路结果必须在 artifact 中可区分，融合过程必须可复现。 |
 | RET-HYB-003 | 最终模型证据必须使用 parent 文本，引用必须能定位到命中的 child 与展开的 parent。 |
-| RET-HYB-004 | 未获 DG-003、DG-004 批准前，只允许测试端口和参数实验，不得发布默认 Milvus schema 或检索配置。 |
+| RET-HYB-004 | DG-003 已批准 BGE-M3 1024 维和 `BAAI/bge-reranker-v2-m3`；DG-004 未批准前只允许显式参数的纯函数与实验，不得发布默认 Milvus schema 或检索配置。 |
 
 ## 4. RAPTOR
 

@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- DG-003、DG-004、DG-005 未批准时，不创建或发布真实 Milvus schema、检索默认参数或 RAPTOR 索引。
+- DG-003 已批准 BGE-M3 1024 维和 `BAAI/bge-reranker-v2-m3`。DG-004、DG-005 未批准时，不创建或发布真实 Milvus schema、检索默认参数或 RAPTOR 索引。
 - 在线工具只读；构建和发布只能由离线 CLI 触发。
 - 每个知识结论必须绑定实际 artifact 中存在的 citation。
 - GraphRAG 只允许白名单模板，禁止执行模型生成 Cypher。
@@ -100,7 +100,7 @@ tests/integration/neo4j/
 - Produces: `fuse_hits(dense, sparse, config) -> list[FusedHit]`。
 - Produces: `expand_parents(hits, parent_store) -> list[Evidence]`。
 
-- [ ] **Step 1: 写可复现融合与父块展开 RED**
+- [x] **Step 1: 写可复现融合与父块展开 RED**
 
   ```python
   def test_small_to_big_returns_parent_and_preserves_child_locator():
@@ -114,13 +114,13 @@ tests/integration/neo4j/
 
   固定 dense/BM25 输入顺序，断言相同配置产生相同排名，并在 artifact 保留两路原始命中。
 
-- [ ] **Step 2: 运行单元 RED**
+- [x] **Step 2: 运行单元 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_hybrid.py -q`
 
   Expected: 融合/父块展开行为缺失导致断言失败。
 
-- [ ] **Step 3: 实现纯函数，不选择未批准参数**
+- [x] **Step 3: 实现纯函数，不选择未批准参数**
 
   ```python
   @dataclass(frozen=True)
@@ -131,9 +131,11 @@ tests/integration/neo4j/
       final_k: int
   ```
 
-  所有参数必须由调用者显式传入；没有 DG-003/004 配置时构建真实 adapter 返回 `CONFIG_NOT_APPROVED`，纯函数单元测试继续运行。
+  所有参数必须由调用者显式传入；DG-004 未批准时构建真实 adapter 返回 `CONFIG_NOT_APPROVED`，纯函数单元测试继续运行。
 
 - [ ] **Step 4: 运行 GREEN；批准参数后执行 Milvus 集成 RED→GREEN**
+
+  单元 GREEN 已完成；Milvus schema、真实 adapter 与集成测试等待 DG-004，不计为完成。
 
   Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_hybrid.py -q`
 
@@ -142,6 +144,8 @@ tests/integration/neo4j/
   `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_hybrid.py -q`
 
 - [ ] **Step 5: 提交混合检索切片**
+
+  纯函数子切片单独提交；完整 Task 2 仍以 Step 4 的 Milvus 集成通过为完成门。
 
   Commit: `feat: add reproducible hybrid retrieval`
 
