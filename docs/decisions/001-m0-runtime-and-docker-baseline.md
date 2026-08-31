@@ -6,7 +6,7 @@
 
 **批准日期：** 2026-08-31
 
-**关联决策门：** DG-001、DG-006
+**关联决策门：** DG-001、DG-003、DG-006
 
 **主计划：** [智能客服 Agent 主项目实施计划](../superpowers/plans/2026-08-31-project-master-plan.md)
 
@@ -131,3 +131,17 @@ LangGraph PostgreSQL checkpointer 使用官方 `langgraph-checkpoint-postgres` �
 - PostgreSQL `statement_timeout`：`2000 ms`。
 
 参数写入 `src/customer_service_agent/config.py`。单元测试可使用更小的显式值验证边界；生产组装必须使用上述批准值，变更时需再次记录用户批准。
+
+## 10. DG-003 与 M3 长期记忆参数批准
+
+2026-09-01，用户批准以下向量模型和 Mem0 PGVector 参数：
+
+- embedding 模型：`BAAI/bge-m3`；
+- embedding 维度：`1024`；
+- reranker：`BAAI/bge-reranker-v2-m3`；
+- Mem0 collection：`customer_memories_v1`；
+- Mem0 PGVector 索引：HNSW，关闭 DiskANN，不增加 pgvectorscale 依赖。
+
+同时批准将相反偏好的替换语义修订为 Mem0 公共 API 支持的原地原子更新：保留原 `memory_id`，在一次 PGVector update 中更新正文、向量和 payload，并只记录一条 `replace_update` 审计。实现不得通过独立 `delete` + `add` 冒充原子替换，也不得直接依赖 Mem0 私有表结构。
+
+上述 embedding 和 reranker 选择关闭 DG-003。真实外部模型调用仍必须使用显式 live opt-in；默认单元与 PostgreSQL 集成测试使用确定性 embedding 替身，不读取或记录 API Key。

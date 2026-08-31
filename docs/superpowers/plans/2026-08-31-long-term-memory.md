@@ -18,7 +18,8 @@
 - Mem0 自动推断必须关闭；应用层传入已归一化的单一事实。
 - Mem0 使用独立 PostgreSQL database 和 role，不复用订单/checkpoint 数据库。
 - collection 名称只来自静态配置和 SQL 标识符白名单。
-- 真实 embedding 模型、维度和索引类型未批准时，PGVector adapter 保持禁用。
+- DG-003 已批准 `BAAI/bge-m3`、1024 维、`BAAI/bge-reranker-v2-m3`；Mem0 collection 固定为 `customer_memories_v1`，使用 HNSW 并关闭 DiskANN。
+- 真实 embedding/reranker 调用仍需显式 live opt-in；默认集成测试使用确定性 embedding 替身。
 
 ## File Structure
 
@@ -191,7 +192,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 
 - [x] **Step 3: 实现同客户同类别冲突规则**
 
-  完全相同规范化内容更新时间而不新增；相反偏好返回冲突；只有包含明确替换意图的后续请求才调用存储端口的原子 `replace`，并分别审计旧记录删除和新记录创建。该端口修正了独立 delete + add 无法保证“任何失败保持旧记录”的计划缺口。
+  完全相同规范化内容更新时间而不新增；相反偏好返回冲突；只有包含明确替换意图的后续请求才调用存储端口的原子 `replace`。M3 批准该操作映射为 Mem0 原地 update：保留旧 `memory_id`，并记录单条 `replace_update` 审计。该端口禁止独立 delete + add，确保任何失败保持旧记录。
 
 - [x] **Step 4: 运行 GREEN**
 
@@ -212,7 +213,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 - Produces: `Mem0PgConfig(dbname, collection_name, embedding_model_dims, connection_string_ref)`。
 - Produces: `Mem0PgMemoryStore` 实现 `MemoryStorePort`。
 
-- [ ] **Step 1: 写动态 collection、错误数据库和客户过滤 RED**
+- [x] **Step 1: 写动态 collection、错误数据库和客户过滤 RED**
 
   ```python
   @pytest.mark.parametrize("name", ["memories;drop table orders", "customer/{id}", ""])
@@ -223,15 +224,15 @@ tests/integration/postgres/test_mem0_pgvector.py
 
   配置测试断言 memory DSN 引用不能等于核心订单/checkpoint DSN 引用。集成测试向客户 A/B 写入相似内容，只允许各自检索。
 
-- [ ] **Step 2: 运行配置 RED**
+- [x] **Step 2: 运行配置 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_mem0_adapter_config.py -q`
 
-- [ ] **Step 3: 实现固定配置和 AsyncMemory 映射**
+- [x] **Step 3: 实现固定配置和 AsyncMemory 映射**
 
-  `AsyncMemory` 配置固定 `provider="pgvector"`；所有 add/search/get_all/delete 调用都传 `user_id=customer_id` 或等价 filters。`add` 使用 `infer=False`，metadata 包含 schema version、来源和 category。适配器只把 Mem0 响应映射为应用 DTO，不向上暴露原始响应。
+  `AsyncMemory` 配置固定 `provider="pgvector"`、1024 维、HNSW 和静态 `customer_memories_v1` collection；所有 add/search/get_all/delete 调用都传 `user_id=customer_id` 或等价 filters。`add` 使用 `infer=False`，metadata 包含 schema version、来源和 category。`replace` 先验证客户归属，再调用 Mem0 update 原地更新并保留 ID。适配器只把 Mem0 响应映射为应用 DTO，不向上暴露原始响应。
 
-- [ ] **Step 4: 运行 GREEN 与 PostgreSQL/pgvector 集成**
+- [x] **Step 4: 运行 GREEN 与 PostgreSQL/pgvector 集成**
 
   Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_mem0_adapter_config.py -q`
 
@@ -239,7 +240,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 
   集成前检查目标 database/role 是测试专用且 `vector` 扩展存在；不满足时停止，不修改订单数据库。验证保存、召回、列出、删除、重复删除、客户过滤和 unavailable 降级。
 
-- [ ] **Step 5: 提交 PGVector 适配**
+- [x] **Step 5: 提交 PGVector 适配**
 
   Commit: `feat: persist Mem0 memories in isolated pgvector`
 

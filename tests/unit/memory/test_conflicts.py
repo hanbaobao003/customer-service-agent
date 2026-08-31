@@ -83,9 +83,10 @@ class Store:
         if self.fail_replace:
             raise MemoryStoreUnavailable
         assert self.records[existing_memory_id].customer_id == customer_id
-        del self.records[existing_memory_id]
-        self.records[replacement.memory_id] = replacement
-        return replacement.memory_id
+        self.records[existing_memory_id] = replacement.model_copy(
+            update={"memory_id": existing_memory_id}
+        )
+        return existing_memory_id
 
 
 class Evidence:
@@ -185,7 +186,7 @@ async def test_duplicate_refreshes_existing_record_without_new_item() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_explicit_replace_uses_atomic_store_contract_and_two_audits() -> None:
+async def test_explicit_replace_preserves_id_and_writes_one_update_audit() -> None:
     store = Store(existing_record())
     audit = Audit()
 
@@ -195,13 +196,17 @@ async def test_explicit_replace_uses_atomic_store_contract_and_two_audits() -> N
         request=preference("偏好英文"),
     )
 
-    assert result.memory_id == "memory-new"
+    assert result.memory_id == "memory-old"
     assert store.replace_count == 1
-    assert list(store.records) == ["memory-new"]
-    assert [event["action"] for event in audit.events] == [
-        "replace_delete",
-        "replace_create",
-    ]
+    assert list(store.records) == ["memory-old"]
+    assert store.records["memory-old"].content == "偏好英文"
+    assert audit.events == [{
+        "action": "replace_update",
+        "customer_id": "customer-a",
+        "memory_id": "memory-old",
+        "category": "language",
+        "result": "updated",
+    }]
 
 
 @pytest.mark.unit

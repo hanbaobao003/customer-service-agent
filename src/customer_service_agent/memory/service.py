@@ -318,9 +318,10 @@ class MemoryService:
                         "updated_at": now,
                     }
                 )
-                await self._store.add(
+                await self._store.replace(
                     customer_id=context.customer_id,
-                    record=refreshed,
+                    existing_memory_id=existing.memory_id,
+                    replacement=refreshed,
                 )
                 await self._audit.record(
                     action="remember",
@@ -340,18 +341,11 @@ class MemoryService:
                 )
                 replacement = record.model_copy(update={"memory_id": memory_id})
                 await self._audit.record(
-                    action="replace_delete",
-                    customer_id=context.customer_id,
-                    memory_id=existing.memory_id,
-                    category=existing.category,
-                    result="deleted",
-                )
-                await self._audit.record(
-                    action="replace_create",
+                    action="replace_update",
                     customer_id=context.customer_id,
                     memory_id=memory_id,
                     category=replacement.category,
-                    result="created",
+                    result="updated",
                 )
                 return MemorySummary.from_record(replacement)
 

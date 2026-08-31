@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to execute this roadmap milestone by milestone. Entering a feature task also requires `superpowers:test-driven-development`; the five child plans remain the source of exact RED→GREEN steps.
 
-**状态：** 已批准，M0–M2 已完成，M3 进行中（订单 Tasks 4–5 已完成）
+**状态：** 已批准，M0–M3 已完成；下一阶段 M4
 
 **版本：** 1.0
 
@@ -45,7 +45,7 @@
 |---|---|---|---|
 | DG-001 运行时与框架确切版本 | M1 创建 `pyproject.toml` 前 | 依赖锁定和所有 SDK 实现 | 文档与环境只读盘点 |
 | DG-002 DeepSeek 模型 ID | M5 创建真实模型工厂前 | 真实 Agent、摘要和 NL2SQL 模型调用 | scripted model 单元与契约测试 |
-| DG-003 embedding 维度与 reranker | M3/M4 创建真实向量 schema 前 | Mem0 向量适配、Milvus schema 与真实 rerank | 纯函数、端口和确定性测试替身 |
+| DG-003 embedding 维度与 reranker（已批准：BGE-M3 1024 维、bge-reranker-v2-m3） | M3/M4 创建真实向量 schema 前 | 已关闭；真实外部调用仍需 live opt-in | 纯函数、端口和确定性测试替身 |
 | DG-004 检索参数 | M4 发布混合索引前 | 默认检索配置与发布 | 参数化算法测试和基线报告 |
 | DG-005 RAPTOR 参数 | M4 发布 RAPTOR 索引前 | 真实摘要树发布 | 确定性树构建与完整性测试 |
 | DG-006 数据服务连接与资源 | M0 兼容性检查后、首次集成测试前 | 对应 Docker 集成测试 | 单元和契约测试 |
@@ -113,7 +113,9 @@ DG-001 的批准版本记录在 [M0 运行时与 Docker 兼容性基线](../../d
 
 ### M3：PostgreSQL 业务持久化
 
-**前置：** M2 完成；PostgreSQL 对应 DG-006 已批准。Mem0 真实向量 schema 还需要相关向量模型与维度批准。
+**状态：** 已完成（2026-09-01）。
+
+**前置：** M2 完成；PostgreSQL 对应 DG-006 已批准；DG-003 已批准 BGE-M3 1024 维和 HNSW Mem0 配置。
 
 **执行：**
 

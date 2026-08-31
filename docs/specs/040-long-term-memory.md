@@ -1,8 +1,8 @@
 # 长期记忆规格
 
-**状态：** 实施中（M2 Tasks 1–4 已完成；Task 5 待 M3）
+**状态：** 已实施（Tasks 1–5 已完成）
 
-**版本：** 1.1
+**版本：** 1.2
 
 **上位规格：** [智能客服 Agent 总体规格](000-customer-service-agent-overview.md)
 
@@ -158,7 +158,7 @@ Mem0 官方支持 PGVector 作为 vector store。首版可以复用同一个 Pos
 
 1. 完全相同的归一化偏好再次保存时更新来源时间，不新增重复展示项；
 2. 明确相反的新偏好不自动删除旧记录；工具必须返回 `MEMORY_CONFLICT` 并列出面向用户的冲突摘要；
-3. 用户随后明确要求替换时，应用层删除旧记录并创建新记录，两步均审计；
+3. 用户随后明确要求替换时，应用层通过 Mem0 原地更新旧记录，保留 `memory_id`，并记录一次 `replace_update` 审计；
 4. 当前消息始终优先于召回记忆；
 5. 不允许模型自行决定哪个长期偏好“更真实”。
 
@@ -167,6 +167,16 @@ Mem0 官方支持 PGVector 作为 vector store。首版可以复用同一个 Pos
 | MEM-CONFLICT-001 | 冲突检测必须基于同客户、同 category 和规范化内容，不跨客户比较。 |
 | MEM-CONFLICT-002 | 未得到明确替换指令时不得自动覆盖冲突记录。 |
 | MEM-CONFLICT-003 | 冲突处理失败不得阻止当前普通客服请求，只能跳过记忆写入并说明。 |
+| MEM-CONFLICT-004 | 明确替换必须原子更新正文、向量和 payload，保留原 `memory_id`；失败时旧记录保持不变，禁止用独立 delete + add 实现。 |
+
+### 7.1 已批准的 PGVector 参数
+
+- embedding：`BAAI/bge-m3`，维度 `1024`；
+- collection：`customer_memories_v1`；
+- 索引：pgvector HNSW，关闭 DiskANN；
+- reranker：`BAAI/bge-reranker-v2-m3`，供后续检索链使用，不参与 Mem0 写入事务。
+
+真实 embedding 或 reranker 调用必须显式 opt-in；确定性 PostgreSQL 集成测试不得依赖外部模型。
 
 ## 8. 稳定错误码
 
@@ -216,6 +226,12 @@ Mem0 官方支持 PGVector 作为 vector store。首版可以复用同一个 Pos
 - Given：用户列出自己的记忆后指定一个 memory ID；
 - When：明确要求忘记并调用删除；
 - Then：记录不可再召回，重复删除不产生跨客户泄露。
+
+### MEM-SCN-007：明确替换
+
+- Given：当前客户已有冲突偏好并明确要求替换；
+- When：适配器更新该记忆；
+- Then：`memory_id` 保持不变，正文、向量和 payload 原子更新，只产生一次 `replace_update` 审计；任何失败都保留旧记录。
 
 ## 10. 测试要求
 

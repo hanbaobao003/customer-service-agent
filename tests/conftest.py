@@ -29,6 +29,7 @@ ExternalAccessBlocked = SocketBlockedError
 POSTGRES_CONTAINER = "shared-postgres"
 POSTGRES_RESOURCE_PREFIX = "wang_agent_orders_test_"
 POSTGRES_SQL_RESOURCE_PREFIX = "wang_agent_sql_test_"
+POSTGRES_MEMORY_RESOURCE_PREFIX = "wang_agent_memory_test_"
 
 
 class SecretDsn(str):
@@ -41,6 +42,12 @@ class PostgresSqlDsns:
     owner: SecretDsn
     reader: SecretDsn
     reader_role: str
+
+
+@dataclass(frozen=True)
+class PostgresMemoryDatabase:
+    dsn: SecretDsn
+    dbname: str
 
 
 class ExternalAccessGuard:
@@ -101,6 +108,16 @@ def _postgres_sql_resource_name(kind: str, run_id: str) -> str:
     return f"{POSTGRES_SQL_RESOURCE_PREFIX}{kind}_{run_id}"
 
 
+def _postgres_memory_resource_name(kind: str, run_id: str) -> str:
+    if kind not in {"db", "role"}:
+        raise ValueError("memory resource kind must be db or role")
+    if len(run_id) != 12 or any(
+        character not in "0123456789abcdef" for character in run_id
+    ):
+        raise ValueError("test_run_id must be 12 lowercase hexadecimal characters")
+    return f"{POSTGRES_MEMORY_RESOURCE_PREFIX}{kind}_{run_id}"
+
+
 def _postgres_admin_sql(sql: str) -> None:
     result = subprocess.run(
         [
@@ -119,6 +136,30 @@ def _postgres_admin_sql(sql: str) -> None:
     )
     if result.returncode != 0:
         raise RuntimeError("PostgreSQL test resource command failed")
+
+
+def _postgres_database_admin_sql(database: str, sql: str) -> None:
+    if not database.startswith(POSTGRES_MEMORY_RESOURCE_PREFIX):
+        raise ValueError("database is not an owned memory test resource")
+    result = subprocess.run(
+        [
+            "docker",
+            "exec",
+            "-i",
+            POSTGRES_CONTAINER,
+            "sh",
+            "-c",
+            'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1"',
+            "sh",
+            database,
+        ],
+        input=sql,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("PostgreSQL memory extension command failed")
 
 
 @pytest.fixture
@@ -210,4 +251,48 @@ def postgres_sql_dsns() -> Iterator[PostgresSqlDsns]:
             f"DROP DATABASE {database} WITH (FORCE);\n"
             f"DROP ROLE {reader};\n"
             f"DROP ROLE {owner};\n"
+        )
+
+
+@pytest.fixture
+def postgres_memory_database() -> Iterator[PostgresMemoryDatabase]:
+    status = subprocess.run(
+        [
+            "docker",
+            "inspect",
+            "-f",
+            "{{.State.Running}}",
+            POSTGRES_CONTAINER,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if status.returncode != 0 or status.stdout.strip() != "true":
+        pytest.fail(
+            f"approved PostgreSQL container {POSTGRES_CONTAINER!r} is not running"
+        )
+
+    run_id = uuid.uuid4().hex[:12]
+    database = _postgres_memory_resource_name("db", run_id)
+    role = _postgres_memory_resource_name("role", run_id)
+    password = secrets.token_hex(24)
+    _postgres_admin_sql(
+        f"CREATE ROLE {role} LOGIN PASSWORD '{password}';\n"
+        f"CREATE DATABASE {database} OWNER {role};\n"
+    )
+    _postgres_database_admin_sql(database, "CREATE EXTENSION vector;\n")
+    try:
+        yield PostgresMemoryDatabase(
+            dsn=SecretDsn(
+                f"postgresql://{role}:{password}@127.0.0.1:5432/{database}"
+            ),
+            dbname=database,
+        )
+    finally:
+        assert database == _postgres_memory_resource_name("db", run_id)
+        assert role == _postgres_memory_resource_name("role", run_id)
+        _postgres_admin_sql(
+            f"DROP DATABASE {database} WITH (FORCE);\n"
+            f"DROP ROLE {role};\n"
         )
