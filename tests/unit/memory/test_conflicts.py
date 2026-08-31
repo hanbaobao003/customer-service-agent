@@ -154,6 +154,21 @@ async def test_opposite_preference_requires_explicit_replace() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_negated_replace_does_not_authorize_overwrite() -> None:
+    store = Store(existing_record())
+
+    with pytest.raises(MemoryConflict):
+        await service(store).remember(
+            context(),
+            user_message="以后请记住英文，但不要替换原偏好",
+            request=preference("偏好英文"),
+        )
+
+    assert list(store.records) == ["memory-old"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_duplicate_refreshes_existing_record_without_new_item() -> None:
     store = Store(existing_record())
 

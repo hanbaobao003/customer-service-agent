@@ -26,3 +26,5 @@
 - 已验证：客户/类别边界、重复不新增展示项、未授权冲突不覆盖、明确替换和替换失败保持旧记录。
 - 未验证：真实 Mem0 并发事务与审计原子性；属于 M3 Task 5。
 - 提交：`feat: preserve memory conflicts until explicit replacement`（本记录随该提交保存）。
+
+完成门回归另验证“不要替换”不会授权覆盖，证据记录在 `m2-memory-policy.md`。

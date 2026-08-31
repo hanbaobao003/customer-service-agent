@@ -443,7 +443,7 @@ _REPLACE_MARKERS = ("替换", "改为", "更新为")
 
 
 def _has_replace_intent(message: str) -> bool:
-    return any(marker in message for marker in _REPLACE_MARKERS)
+    return _contains_affirmed_action(message, _REPLACE_MARKERS)
 
 
 class PolicyDecision(_MemoryModel):
@@ -485,15 +485,25 @@ class MemoryPolicy:
 _LONG_TERM_MARKERS = ("以后", "今后", "长期", "一直", "每次")
 _SAVE_VERBS = ("记住", "保存", "记下来")
 _DELETE_VERBS = ("忘记", "删除", "清除")
+_NEGATION_AT_END = re.compile(r"(?:不要|别|无需|不需要|不必)(?:再)?\s*$")
+
+
+def _contains_affirmed_action(message: str, actions: tuple[str, ...]) -> bool:
+    for action in actions:
+        for match in re.finditer(re.escape(action), message):
+            prefix = message[max(0, match.start() - 6) : match.start()]
+            if not _NEGATION_AT_END.search(prefix):
+                return True
+    return False
 
 
 def _detect_intent(message: str) -> MemoryIntent:
     lowered = message.lower()
-    if any(verb in lowered for verb in _DELETE_VERBS):
+    if _contains_affirmed_action(lowered, _DELETE_VERBS):
         return MemoryIntent.DELETE
-    if any(marker in lowered for marker in _LONG_TERM_MARKERS) and any(
-        verb in lowered for verb in _SAVE_VERBS
-    ):
+    if any(
+        marker in lowered for marker in _LONG_TERM_MARKERS
+    ) and _contains_affirmed_action(lowered, _SAVE_VERBS):
         return MemoryIntent.SAVE
     return MemoryIntent.NONE
 

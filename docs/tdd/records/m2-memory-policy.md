@@ -28,3 +28,10 @@
 - 已验证：明确授权、临时覆盖拒绝、支付卡/验证码/API Key/密码/身份证/内部推理拒绝和不回显。
 - 未验证：语言模型释义扩展和真实 Mem0 写入；首版授权故意保持保守。
 - 提交：`feat: require explicit safe memory intent`（本记录随该提交保存）。
+
+## 完成门回归
+
+- 审阅发现：纯子串检测会把“以后不要记住”和“不要删除”误判为授权，替换检测也存在同类问题。
+- RED：新增 3 个否定授权场景，`3 failed, 14 passed`。
+- GREEN：动作匹配跳过紧邻中文否定前缀的出现；相关测试 `17 passed`，全量快速测试 `99 passed`。
+- 修复提交：`fix: reject negated memory actions`。

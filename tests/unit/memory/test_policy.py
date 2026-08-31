@@ -43,6 +43,23 @@ def test_explicit_delete_authorizes_delete_intent() -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
+    "message",
+    ["以后不要记住这个偏好", "请不要删除这条记忆"],
+)
+def test_negated_memory_action_is_not_authorized(message: str) -> None:
+    decision = MemoryPolicy().evaluate(
+        message=message,
+        kind="preference",
+        content="偏好使用中文回答",
+    )
+
+    assert decision.intent is MemoryIntent.NONE
+    assert decision.allowed is False
+    assert decision.code == "MEMORY_EXPLICIT_INTENT_REQUIRED"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
     ("content", "category"),
     [
         ("支付卡号 6222021234567890", "payment_card"),
