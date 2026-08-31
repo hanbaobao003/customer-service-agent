@@ -2,7 +2,7 @@
 
 **状态：** 已批准设计，待实施
 
-**版本：** 1.0
+**版本：** 1.1
 
 **上位规格：** [智能客服 Agent 总体规格](000-customer-service-agent-overview.md)
 
@@ -20,7 +20,7 @@
 | 结构化线程状态 | 当前线程 | 工具和中间件 | PostgreSQL checkpointer |
 | 订单事实 | 长期业务数据 | 订单领域服务 | PostgreSQL |
 | 客服知识 | 跨用户公共知识 | 版本化模拟语料 | Milvus / Neo4j |
-| 用户长期记忆 | 跨线程、单客户 | 用户明确指令或已验证事实 | Mem0 + 独立 Milvus collection |
+| 用户长期记忆 | 跨线程、单客户 | 用户明确指令或已验证事实 | Mem0 + 独立 PostgreSQL/pgvector 数据库 |
 
 长期记忆不得替代订单查询。即使记忆中出现订单相关文本，Agent 也必须调用订单工具获取当前事实。
 
@@ -139,17 +139,18 @@
 | MEM-DELETE-003 | 重复删除返回稳定的已不存在结果，不泄露其他客户记录。 |
 | MEM-DELETE-004 | 删除操作必须写审计，但审计中只保存 memory ID、类别和结果，不保留被删敏感正文。 |
 
-## 6. Milvus 隔离
+## 6. PostgreSQL/pgvector 隔离
 
-Mem0 官方支持 Milvus 作为 vector store，参考 [Mem0 Milvus 配置](https://docs.mem0.ai/components/vectordbs/dbs/milvus)。
+Mem0 官方支持 PGVector 作为 vector store。首版可以复用同一个 PostgreSQL 服务实例，但必须为 Mem0 创建独立逻辑数据库和独立数据库角色，不与订单、审计、幂等或 LangGraph checkpoint 表混用。参考 [Mem0 向量数据库列表](https://docs.mem0.ai/components/vectordbs/overview) 和 [Mem0 PGVector 配置源码](https://github.com/mem0ai/mem0/blob/main/mem0/configs/vector_stores/pgvector.py)。
 
 | ID | 要求 |
 |---|---|
-| MEM-STORE-001 | Mem0 必须使用独立 database 或 collection，不得复用 RAG collection。 |
-| MEM-STORE-002 | collection schema 必须包含可过滤的客户作用域和 schema version。 |
-| MEM-STORE-003 | RAG 索引构建命令不得读取、重建或删除 Mem0 collection。 |
-| MEM-STORE-004 | collection 名称、embedding 维度和连接参数必须来自获批配置；未获批准前真实存储集成保持禁用。 |
-| MEM-STORE-005 | readiness 必须分别报告 RAG 与 Mem0 collection 状态，但不得暴露名称中的租户或客户信息。 |
+| MEM-STORE-001 | Mem0 必须使用独立 PostgreSQL database 和独立 database role；不得复用订单、审计、幂等或 checkpoint 所在逻辑数据库。 |
+| MEM-STORE-002 | Mem0 collection/table 的 payload 必须包含可过滤的客户作用域和 schema version。 |
+| MEM-STORE-003 | RAG 索引构建命令不得连接、重建或删除 Mem0 PostgreSQL database 中的对象。 |
+| MEM-STORE-004 | 必须启用 `vector` 扩展；collection 名称、embedding 维度、索引类型和连接参数必须来自获批配置，未获批准前真实存储集成保持禁用。 |
+| MEM-STORE-005 | readiness 必须分别报告核心 PostgreSQL、Mem0 PostgreSQL/pgvector 与 Milvus RAG 状态，但不得暴露数据库名、表名、租户信息或连接凭证。 |
+| MEM-STORE-006 | collection 名称只能来自部署时静态配置并通过 SQL 标识符白名单校验，不得接受模型、用户请求或工具参数覆盖。 |
 
 ## 7. 冲突与更新
 
@@ -176,7 +177,7 @@ Mem0 官方支持 Milvus 作为 vector store，参考 [Mem0 Milvus 配置](https
 | `MEMORY_VERIFICATION_REQUIRED` | 声称已验证但没有真实工具证据 | 先调用事实工具 |
 | `MEMORY_NOT_FOUND` | 记录不存在或不属于当前客户 | 不泄露存在性 |
 | `MEMORY_CONFLICT` | 新旧长期偏好冲突 | 请求用户明确替换 |
-| `MEMORY_STORE_UNAVAILABLE` | Mem0/Milvus 暂时不可用 | 有界重试后跳过并告知 |
+| `MEMORY_STORE_UNAVAILABLE` | Mem0/PostgreSQL pgvector 暂时不可用 | 有界重试后跳过并告知 |
 
 ## 9. Given/When/Then 验收场景
 
@@ -208,7 +209,7 @@ Mem0 官方支持 Milvus 作为 vector store，参考 [Mem0 Milvus 配置](https
 
 - Given：用户要求保存支付卡号；
 - When：记忆策略校验；
-- Then：返回 `MEMORY_POLICY_REJECTED`，Milvus 没有新增记录，审计不保存卡号正文。
+- Then：返回 `MEMORY_POLICY_REJECTED`，Mem0 PostgreSQL 数据库没有新增记录，审计不保存卡号正文。
 
 ### MEM-SCN-006：明确删除
 
@@ -220,7 +221,7 @@ Mem0 官方支持 Milvus 作为 vector store，参考 [Mem0 Milvus 配置](https
 
 - 单元：意图门、允许/禁止类型、敏感信息规则、DTO、冲突、当前指令优先级。
 - 契约：三个工具 schema、错误码、artifact 和运行时客户注入。
-- Milvus 集成：客户过滤、RAG collection 隔离、保存/召回/删除和不可用降级。
+- PostgreSQL/pgvector 集成：独立数据库和角色、客户过滤、固定 collection 名称、保存/召回/删除和不可用降级。
 - 评测：6 条场景至少覆盖明确保存、非明确不保存、召回、删除、敏感拒绝和客户隔离。
 
 任何跨客户召回或敏感内容落库测试失败时，长期记忆能力必须阻断发布。

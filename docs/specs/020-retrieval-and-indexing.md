@@ -2,7 +2,7 @@
 
 **状态：** 已批准设计，待实施
 
-**版本：** 1.0
+**版本：** 1.1
 
 **上位规格：** [智能客服 Agent 总体规格](000-customer-service-agent-overview.md)
 
@@ -256,7 +256,7 @@ validate source -> normalize -> build candidate index -> run integrity checks
 ## 11. 测试要求
 
 - 单元：规范化、父子映射、融合输入输出、RAPTOR 节点追溯、图模板选择、引用校验、发布状态机。
-- Milvus 集成：稠密/BM25 两路召回、metadata 过滤、版本隔离、Mem0 collection 隔离。
+- Milvus 集成：稠密/BM25 两路召回、metadata 过滤，以及常规 RAG 与 RAPTOR collection 的版本隔离。
 - Neo4j 集成：确定性导入、约束、白名单模板、路径证据和数据版本。
 - Tavily opt-in：URL、抓取时间、超时和脱敏，不将网络波动计入普通测试。
 - 评测：每种 RAG 5 条场景，gold evidence Hit@5 必须达到 80% 或以上。

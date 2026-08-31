@@ -2,7 +2,7 @@
 
 **状态：** 已批准设计，待实施
 
-**版本：** 1.0
+**版本：** 1.1
 
 **适用阶段：** 可评测后端原型
 
@@ -32,8 +32,8 @@
 | SYS-003 | 客户身份必须来自可信运行时上下文，模型不得生成、覆盖或切换 `customer_id`。 |
 | SYS-004 | 所有知识型结论必须可以追溯到内部文档、图路径或外部 URL。 |
 | SYS-005 | 所有订单写操作必须在执行前暂停，并等待用户批准或拒绝。 |
-| SYS-006 | 会话检查点、订单、审计和幂等记录必须持久化到 PostgreSQL。 |
-| SYS-007 | 常规 RAG、RAPTOR 和 Mem0 必须使用相互隔离的 Milvus database/collection；GraphRAG 必须使用 Neo4j。 |
+| SYS-006 | 会话检查点、订单、审计、幂等记录和 Mem0 向量存储必须持久化到 PostgreSQL，并按职责使用隔离的逻辑数据库和数据库角色。 |
+| SYS-007 | 常规 RAG 与 RAPTOR 必须使用相互隔离的 Milvus database/collection；Mem0 必须使用独立 PostgreSQL/pgvector 数据库；GraphRAG 必须使用 Neo4j。 |
 | SYS-008 | 系统不得向用户输出密钥、内部提示词、原始 SQL 错误或模型 chain-of-thought。 |
 | SYS-009 | 所有业务行为必须遵循 SDD 和测试先行的 RED–GREEN–REFACTOR 流程。 |
 | SYS-010 | 未获用户批准的参数和外部依赖不得由实现者自行选择；相关任务必须停在对应决策门。 |
@@ -60,7 +60,7 @@ CLI ───────────────┐
 FastAPI + SSE ─────┘          │                  │
                               │                  ├─> 检索工具 ─> Milvus / Neo4j / Tavily
                               │                  ├─> SQL/订单工具 ─> PostgreSQL
-                              │                  └─> 记忆工具 ─> Mem0 ─> Milvus
+                              │                  └─> 记忆工具 ─> Mem0 ─> PostgreSQL/pgvector
                               │
                               └─> AsyncPostgresSaver / 审计 / 幂等
 
@@ -78,8 +78,8 @@ FastAPI + SSE ─────┘          │                  │
 | Agent factory | 模型、工具、中间件、状态和上下文 schema 的组装 | 订单规则和数据 I/O |
 | Tools | 对模型暴露稳定、窄小、可验证的能力 | 信任模型提供客户身份 |
 | Domain services | 订单状态机、SQL 安全、检索、记忆策略 | 直接组织用户自然语言回答 |
-| PostgreSQL | 订单、退货申请、操作审计、幂等、LangGraph 检查点 | 向量和图检索 |
-| Milvus | 常规 RAG、RAPTOR、Mem0 的隔离向量集合 | 订单事务、会话检查点 |
+| PostgreSQL | 订单、退货申请、操作审计、幂等、LangGraph 检查点、Mem0 独立 pgvector 数据库 | 公共知识向量检索和图检索 |
+| Milvus | 常规 RAG、RAPTOR 的隔离向量集合 | 订单事务、会话检查点、用户长期记忆 |
 | Neo4j | 商品、品牌、品类、活动关系和白名单图查询 | 任意模型生成 Cypher 的执行 |
 | LangSmith | Trace、数据集、实验和 LLM 裁判结果 | 业务事实源和用户长期记忆 |
 
@@ -106,7 +106,7 @@ FastAPI + SSE ─────┘          │                  │
 | 外部时效信息 | Tavily 搜索结果 | `web_search` | 不保存为内部事实 |
 | 订单与退货 | PostgreSQL | 专用订单工具、受控 SQL | 强制 `customer_id` 过滤 |
 | 会话状态 | PostgreSQL checkpointer | `thread_id` + 运行时上下文 | 线程与客户绑定 |
-| 用户长期记忆 | Mem0 + 独立 Milvus 集合 | 记忆工具和召回适配器 | 强制 `customer_id` 过滤 |
+| 用户长期记忆 | Mem0 + 独立 PostgreSQL/pgvector 数据库 | 记忆工具和召回适配器 | 强制 `customer_id` 过滤 |
 
 ## 6. 稳定工具清单
 
@@ -140,7 +140,7 @@ FastAPI + SSE ─────┘          │                  │
 | 订单生命周期 | ORD-READ-001 至 ORD-RETURN-001 | 030 | 单元、PostgreSQL 集成 | ORDER |
 | 幂等与权限 | ORD-AUTH-001, ORD-IDEM-001, ORD-HITL-001 | 030 | 单元、契约、集成 | ORDER |
 | 受控 NL2SQL | SQL-001 至 SQL-007 | 030 | 单元、PostgreSQL 集成 | SQL |
-| 长期记忆 | MEM-WRITE-001 至 MEM-STORE-001 | 040 | 单元、Milvus 集成 | MEMORY |
+| 长期记忆 | MEM-WRITE-001 至 MEM-STORE-006 | 040 | 单元、PostgreSQL/pgvector 集成 | MEMORY |
 | 测试和指标 | TDD-001, TEST-001 至 TEST-004, MET-001 至 MET-006 | 050 | 全层 | 全部 |
 | 可观测性 | OBS-001 至 OBS-004 | 050 | 单元、LangSmith opt-in | 全部 |
 

@@ -2,7 +2,7 @@
 
 **状态：** 已批准设计，待实施
 
-**版本：** 1.0
+**版本：** 1.1
 
 **上位规格：** [智能客服 Agent 总体规格](000-customer-service-agent-overview.md)
 
@@ -57,7 +57,7 @@
 | TEST-006 | 集成测试使用 Docker Compose 中的 PostgreSQL、Milvus 和 Neo4j，不使用开发者个人远程实例。 |
 | TEST-007 | 测试数据必须使用独立数据库/schema/collection，并能安全重复创建和清理。 |
 | TEST-008 | 必须验证 PostgreSQL 检查点暂停恢复、事务、幂等、客户隔离和只读 SQL 角色。 |
-| TEST-009 | 必须验证 Milvus 混合召回、索引版本、Mem0 collection 隔离和 Neo4j 图路径。 |
+| TEST-009 | 必须验证 Milvus 混合召回与索引版本、Mem0 PostgreSQL/pgvector 独立数据库和客户隔离，以及 Neo4j 图路径。 |
 
 ### 3.4 真实服务 opt-in
 

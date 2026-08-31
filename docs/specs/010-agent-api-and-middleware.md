@@ -2,7 +2,7 @@
 
 **状态：** 已批准设计，待实施
 
-**版本：** 1.0
+**版本：** 1.1
 
 **上位规格：** [智能客服 Agent 总体规格](000-customer-service-agent-overview.md)
 
@@ -114,7 +114,7 @@
 ### 4.3 健康检查
 
 - `GET /health/live`：只验证进程事件循环可响应；不得访问外部依赖。
-- `GET /health/ready`：验证配置完整、PostgreSQL、Milvus、Neo4j 可用和已发布索引版本存在；不得调用付费模型或 Tavily。
+- `GET /health/ready`：验证配置完整、核心 PostgreSQL、Mem0 PostgreSQL/pgvector、Milvus、Neo4j 可用和已发布索引版本存在；不得调用付费模型或 Tavily。
 
 | ID | 要求 |
 |---|---|
