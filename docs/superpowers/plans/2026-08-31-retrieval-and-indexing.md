@@ -47,7 +47,7 @@ tests/integration/neo4j/
 - Produces: `Evidence(citation_id, text)` 与 `RetrievalArtifact(hits, query, index_version, warnings)`。
 - Produces: `RetrievalResult(answerable, evidence, citations, artifact)`。
 
-- [ ] **Step 1: 写伪引用、无界证据和未知字段 RED**
+- [x] **Step 1: 写伪引用、无界证据和未知字段 RED**
 
   ```python
   def test_rejects_evidence_with_unknown_citation():
@@ -60,13 +60,13 @@ tests/integration/neo4j/
 
   契约测试对 DTO 使用 `extra="forbid"`，并断言模型可见序列化不含完整原文、原始分数数组和内部连接信息。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_models.py tests/unit/retrieval/test_citations.py tests/contract/test_retrieval_tools.py -q`
 
   Expected: 引用完整性或长度边界尚未实现导致断言失败。
 
-- [ ] **Step 3: 实现最小 DTO 和校验器**
+- [x] **Step 3: 实现最小 DTO 和校验器**
 
   ```python
   def validate_citations(*, evidence: Sequence[Evidence], citations: Sequence[Citation]) -> None:
@@ -78,13 +78,13 @@ tests/integration/neo4j/
 
   `RetrievalResult` 在无命中、冲突或低置信度时显式 `answerable=False`；长度裁剪产生 warning，不静默丢失来源。
 
-- [ ] **Step 4: 运行 GREEN**
+- [x] **Step 4: 运行 GREEN**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_models.py tests/unit/retrieval/test_citations.py tests/contract/test_retrieval_tools.py -q`
 
   Expected: DTO、伪引用拒绝、模型内容/artifact 分离通过。
 
-- [ ] **Step 5: 提交统一检索契约**
+- [x] **Step 5: 提交统一检索契约**
 
   Commit: `feat: define traceable retrieval evidence contracts`
 
