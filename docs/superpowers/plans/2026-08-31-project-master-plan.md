@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to execute this roadmap milestone by milestone. Entering a feature task also requires `superpowers:test-driven-development`; the five child plans remain the source of exact RED→GREEN steps.
 
-**状态：** 已批准，M0–M1 已完成，待 M2 实施
+**状态：** 已批准，M0–M1 已完成，M2 实施中（记忆 Tasks 3–4 待完成）
 
 **版本：** 1.0
 
