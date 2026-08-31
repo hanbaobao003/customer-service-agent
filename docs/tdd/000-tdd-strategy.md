@@ -1,10 +1,12 @@
 # 智能客服 Agent TDD 执行规范
 
-**状态：** 待用户审阅
+**状态：** 已批准，待实施
 
 **版本：** 1.1
 
 **上位规格：** [总体规格](../specs/000-customer-service-agent-overview.md) · [评测与可观测性规格](../specs/050-evaluation-and-observability.md)
+
+**主实施计划：** [智能客服 Agent 主项目实施计划](../superpowers/plans/2026-08-31-project-master-plan.md)
 
 ## 1. 目的
 
