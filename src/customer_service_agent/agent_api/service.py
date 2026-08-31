@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncContextManager, Protocol
 
 from customer_service_agent.shared.errors import ServiceError
-from customer_service_agent.shared.models import RuntimeContext
+from customer_service_agent.shared.models import AppEvent, RuntimeContext
 
 
 class ThreadBindingRepository(Protocol):
@@ -23,7 +23,7 @@ class AgentRunner(Protocol):
         *,
         context: RuntimeContext,
         message: str,
-    ) -> AsyncIterator[object]: ...
+    ) -> AsyncIterator[AppEvent]: ...
 
 
 class _ThreadCustomerMismatch(Exception):
@@ -82,7 +82,7 @@ class CustomerService:
         self,
         context: RuntimeContext,
         message: str,
-    ) -> AsyncIterator[object]:
+    ) -> AsyncIterator[AppEvent]:
         if not message.strip():
             raise ServiceError(
                 code="INVALID_MESSAGE",

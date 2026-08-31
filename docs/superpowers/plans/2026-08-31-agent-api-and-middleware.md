@@ -171,7 +171,7 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
 - Produces: `EventSequencer.emit(type, data) -> AppEvent`。
 - Produces: `encode_sse(event) -> bytes`。
 
-- [ ] **Step 1: 写序号、终止事件和脱敏 RED**
+- [x] **Step 1: 写序号、终止事件和脱敏 RED**
 
   ```python
   def test_event_sequence_starts_at_one_and_increments():
@@ -182,13 +182,13 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
 
   契约测试遍历序列化 JSON，断言不存在 `customer_id`、`api_key`、`prompt`、`chain_of_thought` 字段，并验证终止事件之后拒绝继续 emit。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_events.py tests/contract/test_sse_contract.py -q`
 
   Expected: 序号/终止或脱敏断言失败。
 
-- [ ] **Step 3: 实现固定事件枚举和编码器**
+- [x] **Step 3: 实现固定事件枚举和编码器**
 
   ```python
   class EventType(StrEnum):
@@ -202,15 +202,15 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
       MESSAGE_COMPLETED = "message.completed"
   ```
 
-  `encode_sse` 只输出 `event:` 与单行 JSON `data:`；Pydantic 模型设置 `extra="forbid"`。终止状态由 sequencer 管理。
+  `encode_sse` 按 Spec 010 输出单调序号 `id:`、`event:` 与单行 JSON `data:`；Pydantic 模型设置 `extra="forbid"`。终止状态由 sequencer 管理。
 
-- [ ] **Step 4: 运行 GREEN**
+- [x] **Step 4: 运行 GREEN**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_events.py tests/contract/test_sse_contract.py -q`
 
   Expected: 事件类型、严格递增、终止语义和敏感字段拒绝全部通过。
 
-- [ ] **Step 5: 提交 SSE 契约**
+- [x] **Step 5: 提交 SSE 契约**
 
   Commit: `feat: define stable customer service event stream`
 
