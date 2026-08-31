@@ -76,14 +76,14 @@ tests/integration/postgres/test_mem0_pgvector.py
 
 **Files:**
 - Modify: `src/customer_service_agent/memory/service.py`
-- Test: `tests/unit/memory/test_models.py`
+- Test: `tests/unit/memory/test_memory_models.py`
 - Test: `tests/contract/test_memory_tools.py`
 
 **Interfaces:**
 - Produces: `MemoryRecord`、`MemorySource`、`MemorySummary`。
 - Produces: `MemoryStorePort.add/search/list/delete`，每个方法显式接收 `customer_id`。
 
-- [ ] **Step 1: 写 DTO 与模型 schema RED**
+- [x] **Step 1: 写 DTO 与模型 schema RED**
 
   ```python
   def test_memory_summary_never_exposes_embedding_or_score():
@@ -96,11 +96,11 @@ tests/integration/postgres/test_mem0_pgvector.py
 
   契约断言 `remember_preference`、`list_memories`、`forget_memory` 的模型参数没有 `customer_id`，未知字段被拒绝。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_models.py tests/contract/test_memory_tools.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_memory_models.py tests/contract/test_memory_tools.py -q`
 
-- [ ] **Step 3: 实现稳定 DTO 与窄端口**
+- [x] **Step 3: 实现稳定 DTO 与窄端口**
 
   ```python
   class MemoryStorePort(Protocol):
@@ -112,11 +112,11 @@ tests/integration/postgres/test_mem0_pgvector.py
 
   `MemorySource` 强制 thread/request/type；verified fact 还要求真实 tool name 和 verified_at。
 
-- [ ] **Step 4: 运行 GREEN**
+- [x] **Step 4: 运行 GREEN**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_models.py tests/contract/test_memory_tools.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_memory_models.py tests/contract/test_memory_tools.py -q`
 
-- [ ] **Step 5: 提交 DTO 与端口**
+- [x] **Step 5: 提交 DTO 与端口**
 
   Commit: `feat: define isolated memory contracts`
 

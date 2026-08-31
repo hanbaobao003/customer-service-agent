@@ -1,10 +1,12 @@
 """Long-term memory policy and application contracts."""
 
 import re
+from collections.abc import Sequence
+from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class MemoryIntent(StrEnum):
@@ -13,9 +15,132 @@ class MemoryIntent(StrEnum):
     NONE = "none"
 
 
-class PolicyDecision(BaseModel):
+class MemoryKind(StrEnum):
+    PREFERENCE = "preference"
+    VERIFIED_FACT = "verified_fact"
+
+
+class MemorySourceType(StrEnum):
+    EXPLICIT_USER_INSTRUCTION = "explicit_user_instruction"
+    VERIFIED_TOOL_RESULT = "verified_tool_result"
+
+
+class _MemoryModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+
+class MemorySource(_MemoryModel):
+    type: MemorySourceType
+    thread_id: str
+    request_id: str
+    tool_name: str | None = None
+    verified_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_verified_source(self) -> "MemorySource":
+        if self.type is MemorySourceType.VERIFIED_TOOL_RESULT:
+            if not self.tool_name or self.verified_at is None:
+                raise ValueError(
+                    "verified tool source requires tool_name and verified_at"
+                )
+            if self.verified_at.utcoffset() is None:
+                raise ValueError("verified_at must be timezone-aware")
+        return self
+
+
+class MemoryRecord(_MemoryModel):
+    memory_id: str
+    customer_id: str
+    kind: MemoryKind
+    content: str
+    source: MemorySource
+    created_at: datetime
+    updated_at: datetime
+    category: str
+    schema_version: Literal["1.0"] = "1.0"
+    embedding: tuple[float, ...] | None = Field(default=None, exclude=True)
+    score: float | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="after")
+    def validate_kind_source(self) -> "MemoryRecord":
+        if (
+            self.kind is MemoryKind.VERIFIED_FACT
+            and self.source.type is not MemorySourceType.VERIFIED_TOOL_RESULT
+        ):
+            raise ValueError("verified_fact requires verified tool source")
+        return self
+
+
+class MemorySummary(_MemoryModel):
+    memory_id: str
+    kind: MemoryKind
+    content: str
+    category: str
+    updated_at: datetime
+
+    @classmethod
+    def from_record(cls, record: MemoryRecord) -> "MemorySummary":
+        return cls(
+            memory_id=record.memory_id,
+            kind=record.kind,
+            content=record.content,
+            category=record.category,
+            updated_at=record.updated_at,
+        )
+
+
+class VerificationReference(_MemoryModel):
+    tool_name: str | None = None
+    tool_call_id: str | None = None
+
+
+class RememberMemoryRequest(_MemoryModel):
+    kind: MemoryKind
+    content: str
+    category: str
+    verification: VerificationReference | None = None
+
+
+class ListMemoriesRequest(_MemoryModel):
+    category: str | None = None
+
+
+class ForgetMemoryRequest(_MemoryModel):
+    memory_id: str
+
+
+class DeleteResult(_MemoryModel):
+    memory_id: str
+    deleted: bool
+
+
+class MemoryStorePort(Protocol):
+    async def add(self, *, customer_id: str, record: MemoryRecord) -> str: ...
+
+    async def search(
+        self,
+        *,
+        customer_id: str,
+        query: str,
+        limit: int,
+    ) -> Sequence[MemoryRecord]: ...
+
+    async def list(
+        self,
+        *,
+        customer_id: str,
+        category: str | None,
+    ) -> Sequence[MemoryRecord]: ...
+
+    async def delete(
+        self,
+        *,
+        customer_id: str,
+        memory_id: str,
+    ) -> DeleteResult: ...
+
+
+class PolicyDecision(_MemoryModel):
     intent: MemoryIntent
     allowed: bool
     code: str | None = None
