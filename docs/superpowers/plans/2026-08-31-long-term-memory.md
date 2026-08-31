@@ -170,7 +170,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 - Produces: `ConflictDetector.compare(existing, candidate)`。
 - Produces: `MemoryConflict`，只包含面向当前客户的安全摘要。
 
-- [ ] **Step 1: 写重复更新和未授权覆盖 RED**
+- [x] **Step 1: 写重复更新和未授权覆盖 RED**
 
   ```python
   async def test_opposite_preference_requires_explicit_replace():
@@ -184,19 +184,19 @@ tests/integration/postgres/test_mem0_pgvector.py
       assert store.contents("a") == ["偏好中文"]
   ```
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_conflicts.py -q`
 
-- [ ] **Step 3: 实现同客户同类别冲突规则**
+- [x] **Step 3: 实现同客户同类别冲突规则**
 
-  完全相同规范化内容更新时间而不新增；相反偏好返回冲突；只有包含明确替换意图的后续请求才执行 delete old + add new，并分别审计。任何失败保持旧记录。
+  完全相同规范化内容更新时间而不新增；相反偏好返回冲突；只有包含明确替换意图的后续请求才调用存储端口的原子 `replace`，并分别审计旧记录删除和新记录创建。该端口修正了独立 delete + add 无法保证“任何失败保持旧记录”的计划缺口。
 
-- [ ] **Step 4: 运行 GREEN**
+- [x] **Step 4: 运行 GREEN**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_conflicts.py -q`
 
-- [ ] **Step 5: 提交冲突策略**
+- [x] **Step 5: 提交冲突策略**
 
   Commit: `feat: preserve memory conflicts until explicit replacement`
 

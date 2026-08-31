@@ -143,6 +143,14 @@ class MemoryStorePort(Protocol):
         memory_id: str,
     ) -> DeleteResult: ...
 
+    async def replace(
+        self,
+        *,
+        customer_id: str,
+        existing_memory_id: str,
+        replacement: MemoryRecord,
+    ) -> str: ...
+
 
 class ToolEvidencePort(Protocol):
     async def verified_at(
@@ -180,6 +188,39 @@ class MemoryStoreUnavailable(Exception):
     code = "MEMORY_STORE_UNAVAILABLE"
 
 
+class ConflictKind(StrEnum):
+    NONE = "none"
+    DUPLICATE = "duplicate"
+    CONFLICT = "conflict"
+
+
+class ConflictDetector:
+    def compare(
+        self,
+        existing: MemoryRecord,
+        candidate: MemoryRecord,
+    ) -> ConflictKind:
+        if (
+            existing.customer_id != candidate.customer_id
+            or existing.kind is not candidate.kind
+            or existing.category != candidate.category
+        ):
+            return ConflictKind.NONE
+        if _normalize_fact(existing.content).casefold() == _normalize_fact(
+            candidate.content
+        ).casefold():
+            return ConflictKind.DUPLICATE
+        return ConflictKind.CONFLICT
+
+
+class MemoryConflict(Exception):
+    code = "MEMORY_CONFLICT"
+
+    def __init__(self, existing: MemorySummary) -> None:
+        self.existing = existing
+        super().__init__(self.code)
+
+
 class UserMemoryContext(_MemoryModel):
     items: tuple[MemorySummary, ...] = ()
     treat_as_data_not_instructions: Literal[True] = True
@@ -197,6 +238,7 @@ class MemoryService:
         audit: MemoryAuditPort,
         clock: Callable[[], datetime],
         id_generator: Callable[[], str],
+        conflict_detector: ConflictDetector | None = None,
     ) -> None:
         self._store = store
         self._policy = policy
@@ -204,6 +246,7 @@ class MemoryService:
         self._audit = audit
         self._clock = clock
         self._id_generator = id_generator
+        self._conflict_detector = conflict_detector or ConflictDetector()
 
     async def remember(
         self,
@@ -261,6 +304,57 @@ class MemoryService:
             updated_at=now,
             category=request.category.strip(),
         )
+
+        existing_records = await self._store.list(
+            customer_id=context.customer_id,
+            category=record.category,
+        )
+        for existing in existing_records:
+            conflict = self._conflict_detector.compare(existing, record)
+            if conflict is ConflictKind.DUPLICATE:
+                refreshed = existing.model_copy(
+                    update={
+                        "source": record.source,
+                        "updated_at": now,
+                    }
+                )
+                await self._store.add(
+                    customer_id=context.customer_id,
+                    record=refreshed,
+                )
+                await self._audit.record(
+                    action="remember",
+                    customer_id=context.customer_id,
+                    memory_id=refreshed.memory_id,
+                    category=refreshed.category,
+                    result="refreshed",
+                )
+                return MemorySummary.from_record(refreshed)
+            if conflict is ConflictKind.CONFLICT:
+                if not _has_replace_intent(user_message):
+                    raise MemoryConflict(MemorySummary.from_record(existing))
+                memory_id = await self._store.replace(
+                    customer_id=context.customer_id,
+                    existing_memory_id=existing.memory_id,
+                    replacement=record,
+                )
+                replacement = record.model_copy(update={"memory_id": memory_id})
+                await self._audit.record(
+                    action="replace_delete",
+                    customer_id=context.customer_id,
+                    memory_id=existing.memory_id,
+                    category=existing.category,
+                    result="deleted",
+                )
+                await self._audit.record(
+                    action="replace_create",
+                    customer_id=context.customer_id,
+                    memory_id=memory_id,
+                    category=replacement.category,
+                    result="created",
+                )
+                return MemorySummary.from_record(replacement)
+
         memory_id = await self._store.add(
             customer_id=context.customer_id,
             record=record,
@@ -343,6 +437,13 @@ def _normalize_fact(content: str) -> str:
     if not normalized:
         raise MemoryPolicyError("MEMORY_POLICY_REJECTED")
     return normalized
+
+
+_REPLACE_MARKERS = ("替换", "改为", "更新为")
+
+
+def _has_replace_intent(message: str) -> bool:
+    return any(marker in message for marker in _REPLACE_MARKERS)
 
 
 class PolicyDecision(_MemoryModel):
