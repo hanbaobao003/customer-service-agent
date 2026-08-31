@@ -81,7 +81,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 
 **Interfaces:**
 - Produces: `MemoryRecord`、`MemorySource`、`MemorySummary`。
-- Produces: `MemoryStorePort.add/search/list/delete`，每个方法显式接收 `customer_id`。
+- Produces: `MemoryStorePort.add/search/list/delete/replace`，每个方法显式接收 `customer_id`；`replace` 由 Task 4 增补为原子契约。
 
 - [x] **Step 1: 写 DTO 与模型 schema RED**
 
@@ -108,6 +108,7 @@ tests/integration/postgres/test_mem0_pgvector.py
       async def search(self, *, customer_id: str, query: str, limit: int) -> Sequence[MemoryRecord]: ...
       async def list(self, *, customer_id: str, category: str | None) -> Sequence[MemoryRecord]: ...
       async def delete(self, *, customer_id: str, memory_id: str) -> DeleteResult: ...
+      async def replace(self, *, customer_id: str, existing_memory_id: str, replacement: MemoryRecord) -> str: ...
   ```
 
   `MemorySource` 强制 thread/request/type；verified fact 还要求真实 tool name 和 verified_at。
