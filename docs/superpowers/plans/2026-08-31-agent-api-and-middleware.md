@@ -112,7 +112,7 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
 - Produces: `RunLock.acquire(thread_id)` 异步上下文管理器。
 - Produces: `CustomerService.stream_message(context, message) -> AsyncIterator[AppEvent]`。
 
-- [ ] **Step 1: 写客户不匹配和并发运行 RED**
+- [x] **Step 1: 写客户不匹配和并发运行 RED**
 
   ```python
   async def test_bound_thread_rejects_other_customer_before_agent_call():
@@ -127,13 +127,13 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
 
   第二个测试先占用 `t-1`，再次调用必须得到 `THREAD_BUSY`，不同线程仍可运行。
 
-- [ ] **Step 2: 验证两个 RED 都由行为缺失造成**
+- [x] **Step 2: 验证两个 RED 都由行为缺失造成**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_thread_access.py tests/unit/agent_api/test_customer_service.py -q`
 
   Expected: 客户绑定或运行锁断言失败，不是 asyncio fixture 错误。
 
-- [ ] **Step 3: 实现端口和最小内存替身语义**
+- [x] **Step 3: 实现端口和最小内存替身语义**
 
   ```python
   class ThreadBindingRepository(Protocol):
@@ -148,13 +148,13 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
 
   `CustomerService` 的顺序固定为：校验消息 → bind/validate → acquire → agent stream。客户端取消只释放锁，不产生批准或拒绝事件。
 
-- [ ] **Step 4: 运行 GREEN 和取消回归**
+- [x] **Step 4: 运行 GREEN 和取消回归**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_thread_access.py tests/unit/agent_api/test_customer_service.py -q`
 
   Expected: 客户不匹配、同线程忙、不同线程并行和取消释放锁均通过。
 
-- [ ] **Step 5: 提交应用服务边界**
+- [x] **Step 5: 提交应用服务边界**
 
   Commit: `feat: enforce thread ownership and single active run`
 
