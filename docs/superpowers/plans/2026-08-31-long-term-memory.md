@@ -40,7 +40,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 - Produces: `MemoryIntent` 枚举 `save/delete/none`。
 - Produces: `MemoryPolicy.evaluate(message, kind, content) -> PolicyDecision`。
 
-- [ ] **Step 1: 写临时偏好和支付卡号 RED**
+- [x] **Step 1: 写临时偏好和支付卡号 RED**
 
   ```python
   def test_temporary_instruction_does_not_authorize_long_term_write():
@@ -56,19 +56,19 @@ tests/integration/postgres/test_mem0_pgvector.py
 
   另测“以后都用中文，请记住”允许；支付卡号、验证码和 API key 返回 `MEMORY_POLICY_REJECTED`，且 decision 不携带敏感原文。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_policy.py -q`
 
-- [ ] **Step 3: 实现显式短语与敏感检测组合**
+- [x] **Step 3: 实现显式短语与敏感检测组合**
 
   保存意图要求明确长期词与保存动词组合；删除意图要求明确忘记/删除。敏感规则使用命名检测器序列并返回类别，不在日志中返回匹配值。规则是保守门控，不让模型自由判断授权。
 
-- [ ] **Step 4: 运行 GREEN**
+- [x] **Step 4: 运行 GREEN**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_policy.py -q`
 
-- [ ] **Step 5: 提交记忆策略**
+- [x] **Step 5: 提交记忆策略**
 
   Commit: `feat: require explicit safe memory intent`
 
