@@ -25,6 +25,15 @@ class AgentRunner(Protocol):
         message: str,
     ) -> AsyncIterator[AppEvent]: ...
 
+    def resume(
+        self,
+        *,
+        context: RuntimeContext,
+        interrupt_id: str,
+        decision: str,
+        reason: str | None,
+    ) -> AsyncIterator[AppEvent]: ...
+
 
 class _ThreadCustomerMismatch(Exception):
     pass
@@ -91,6 +100,30 @@ class CustomerService:
                 request_id=context.request_id,
             )
 
+        await self._bind_thread(context)
+        stream = self._agent.stream(context=context, message=message)
+        async for event in self._stream_with_lock(context, stream):
+            yield event
+
+    async def resume_decision(
+        self,
+        context: RuntimeContext,
+        *,
+        interrupt_id: str,
+        decision: str,
+        reason: str | None,
+    ) -> AsyncIterator[AppEvent]:
+        await self._bind_thread(context)
+        stream = self._agent.resume(
+            context=context,
+            interrupt_id=interrupt_id,
+            decision=decision,
+            reason=reason,
+        )
+        async for event in self._stream_with_lock(context, stream):
+            yield event
+
+    async def _bind_thread(self, context: RuntimeContext) -> None:
         try:
             await self._bindings.bind_or_validate(
                 thread_id=context.thread_id,
@@ -105,9 +138,14 @@ class CustomerService:
                 cause=error,
             ) from error
 
+    async def _stream_with_lock(
+        self,
+        context: RuntimeContext,
+        stream: AsyncIterator[AppEvent],
+    ) -> AsyncIterator[AppEvent]:
         try:
             async with self._run_lock.acquire(context.thread_id):
-                async for event in self._agent.stream(context=context, message=message):
+                async for event in stream:
                     yield event
         except _ThreadBusy as error:
             raise ServiceError(

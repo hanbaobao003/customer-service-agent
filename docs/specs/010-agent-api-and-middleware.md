@@ -1,6 +1,6 @@
 # Agent、API 与中间件规格
 
-**状态：** 已批准设计，实施中（Tasks 1–3 已完成）
+**状态：** 已批准设计，实施中（Tasks 1–4 已完成）
 
 **版本：** 1.1
 
@@ -76,6 +76,8 @@
   "message": "用户消息"
 }
 ```
+
+首版消息上限经用户批准为：去除首尾空白后最多 4,000 个 Unicode 字符。超过上限返回 `422`，且不得调用 Agent。
 
 成功响应：`200 text/event-stream`。连接持续到 `message.completed`、`approval.required`、`handoff.required` 或不可恢复 `error`。
 

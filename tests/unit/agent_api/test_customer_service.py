@@ -53,6 +53,25 @@ class CancellableAgent:
         yield "recovered"
 
 
+class ResumableAgent:
+    def __init__(self) -> None:
+        self.resume_args = None
+
+    async def stream(self, *, context: RuntimeContext, message: str):
+        yield "unused"
+
+    async def resume(
+        self,
+        *,
+        context: RuntimeContext,
+        interrupt_id: str,
+        decision: str,
+        reason: str | None,
+    ):
+        self.resume_args = (context, interrupt_id, decision, reason)
+        yield "resumed"
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_same_thread_rejects_second_active_run() -> None:
@@ -130,3 +149,28 @@ async def test_client_cancellation_releases_thread_lock() -> None:
         await interrupted
 
     assert await collect(service, context("thread-1")) == ["recovered"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resume_decision_uses_same_thread_authorization_and_lock() -> None:
+    agent = ResumableAgent()
+    service = CustomerService(
+        bindings=InMemoryThreadBindings({"thread-1": "customer-a"}),
+        run_lock=InMemoryRunLock(),
+        agent=agent,
+    )
+    ctx = context("thread-1")
+
+    result = [
+        event
+        async for event in service.resume_decision(
+            ctx,
+            interrupt_id="interrupt-1",
+            decision="reject",
+            reason="信息不正确",
+        )
+    ]
+
+    assert result == ["resumed"]
+    assert agent.resume_args == (ctx, "interrupt-1", "reject", "信息不正确")

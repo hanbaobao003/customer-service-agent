@@ -228,7 +228,7 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
 - Produces: `create_app(service, health) -> FastAPI`。
 - Produces: `DecisionRequest(interrupt_id, decision, reason)`，只允许 approve/reject。
 
-- [ ] **Step 1: 写请求校验、身份来源与 decision RED**
+- [x] **Step 1: 写请求校验、身份来源与 decision RED**
 
   ```python
   def test_message_api_uses_authenticated_customer_not_body(client, service_spy):
@@ -243,23 +243,23 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
 
   另测空消息为 422、`edit` decision 为 422、reject 缺 reason 为 422、readiness 不返回连接串。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/contract/test_message_api.py tests/contract/test_decision_api.py tests/contract/test_health_api.py -q`
 
   Expected: 路由或 schema 尚不存在导致目标契约失败；先排除应用导入错误。
 
-- [ ] **Step 3: 实现最小 ASGI 与 CLI 适配**
+- [x] **Step 3: 实现最小 ASGI 与 CLI 适配**
 
   `create_app` 通过可替换的 `TrustedContextProvider` 从服务端认证上下文取客户 ID；测试 header provider 只在测试工厂注入。CLI 参数 `--customer-id` 经过同一 `RuntimeContext.trusted`，不拼接消息。decision 调用 `CustomerService.resume_decision`，重复决定由服务端稳定返回。
 
-- [ ] **Step 4: 运行 GREEN 和全部契约测试**
+- [x] **Step 4: 运行 GREEN 和全部契约测试**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest -m contract -q`
 
   Expected: 消息流、decision、健康和错误 envelope 契约全部通过。
 
-- [ ] **Step 5: 提交入口适配器**
+- [x] **Step 5: 提交入口适配器**
 
   Commit: `feat: add streaming API and decision contracts`
 
