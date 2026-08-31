@@ -2,7 +2,7 @@
 
 **状态：** 待用户审阅
 
-**版本：** 1.0
+**版本：** 1.1
 
 **上位规格：** [总体规格](../specs/000-customer-service-agent-overview.md) · [评测与可观测性规格](../specs/050-evaluation-and-observability.md)
 
@@ -68,18 +68,23 @@
 
 ## 4. 目标目录结构
 
-以下目录是实施计划的目标，不代表当前已经创建：
+代码目录遵循 [Spec 对齐的代码目录设计](../architecture/code-layout.md)。以下目录是实施计划的目标，不代表当前已经创建：
 
 ```text
 src/customer_service_agent/
+  shared/
+  agent_api/
+  retrieval/
+  commerce/
+  memory/
+  quality/
 tests/
   unit/
-    agent/
+    agent_api/
     retrieval/
-    orders/
-    sql/
+    commerce/
     memory/
-    evaluation/
+    quality/
   contract/
   integration/
     postgres/

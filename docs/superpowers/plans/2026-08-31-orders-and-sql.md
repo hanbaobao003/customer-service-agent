@@ -4,7 +4,7 @@
 
 **Goal:** 实现带客户隔离、状态机、预览审批、幂等执行和审计事务的模拟订单生命周期，以及只读受控 NL2SQL。
 
-**Architecture:** 订单规则集中在领域服务，repository 只执行显式客户作用域的数据操作。写工具先生成不可变 operation 预览和规范化哈希，批准后用同一 operation 在 PostgreSQL 事务中执行。SQL 安全层使用 AST 白名单、可信客户参数、只读角色、LIMIT 和超时，不执行模型生成的任意语句。
+**Architecture:** 目录遵循 `docs/architecture/code-layout.md`，Spec 030 集中在 `commerce/`：`orders.py` 保存订单领域行为，`sql.py` 保存只读安全行为，`postgres.py` 保存共享数据库访问。写工具先生成不可变 operation 预览和规范化哈希，批准后用同一 operation 在 PostgreSQL 事务中执行；SQL 使用 AST 白名单、可信客户参数、只读角色、LIMIT 和超时。
 
 **Tech Stack:** Python 3.13.15、PostgreSQL 17、Pydantic v2、psycopg3、SQLGlot、pytest、pytest-asyncio。
 
@@ -23,19 +23,10 @@
 ## File Structure
 
 ```text
-src/customer_service_agent/orders/models.py       # Order、Item、Return、Operation DTO
-src/customer_service_agent/orders/state_machine.py# 显式状态转换
-src/customer_service_agent/orders/ports.py        # Repository、审计和时钟端口
-src/customer_service_agent/orders/service.py      # 预览与批准执行
-src/customer_service_agent/orders/tools.py        # 六个订单工具契约
-src/customer_service_agent/sql/models.py          # SQL 请求、结果、artifact
-src/customer_service_agent/sql/guard.py           # AST 与白名单校验
-src/customer_service_agent/sql/service.py         # 只读执行编排
-src/customer_service_agent/sql/tools.py           # query_business_data
-src/customer_service_agent/adapters/postgres_orders.py
-src/customer_service_agent/adapters/postgres_sql.py
-tests/unit/orders/
-tests/unit/sql/
+src/customer_service_agent/commerce/orders.py   # DTO、状态机、预览、幂等、订单工具
+src/customer_service_agent/commerce/sql.py      # SQL DTO、AST、安全服务和工具
+src/customer_service_agent/commerce/postgres.py # repository、事务、审计、只读执行
+tests/unit/commerce/
 tests/contract/test_order_tools.py
 tests/contract/test_sql_tool.py
 tests/integration/postgres/test_orders.py
@@ -45,10 +36,8 @@ tests/integration/postgres/test_sql_readonly.py
 ### Task 1: 订单模型与显式状态机
 
 **Files:**
-- Create: `src/customer_service_agent/orders/models.py`
-- Create: `src/customer_service_agent/orders/state_machine.py`
-- Test: `tests/unit/orders/test_state_machine.py`
-- Test: `tests/unit/orders/test_models.py`
+- Create: `src/customer_service_agent/commerce/orders.py`
+- Test: `tests/unit/commerce/test_order_state_machine.py`
 
 **Interfaces:**
 - Produces: `OrderStatus`、`Order`、`OrderItem`、`ReturnRequest`。
@@ -69,7 +58,7 @@ tests/integration/postgres/test_sql_readonly.py
 
 - [ ] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/orders/test_state_machine.py tests/unit/orders/test_models.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_state_machine.py -q`
 
   Expected: 转换矩阵尚未实现导致目标断言失败。
 
@@ -89,7 +78,7 @@ tests/integration/postgres/test_sql_readonly.py
 
 - [ ] **Step 4: 运行 GREEN**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/orders/test_state_machine.py tests/unit/orders/test_models.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_state_machine.py -q`
 
 - [ ] **Step 5: 提交状态机**
 
@@ -98,10 +87,8 @@ tests/integration/postgres/test_sql_readonly.py
 ### Task 2: 客户隔离 repository 与读取工具
 
 **Files:**
-- Create: `src/customer_service_agent/orders/ports.py`
-- Create: `src/customer_service_agent/orders/service.py`
-- Create: `src/customer_service_agent/orders/tools.py`
-- Test: `tests/unit/orders/test_order_access.py`
+- Modify: `src/customer_service_agent/commerce/orders.py`
+- Test: `tests/unit/commerce/test_order_access.py`
 - Test: `tests/contract/test_order_tools.py`
 
 **Interfaces:**
@@ -123,7 +110,7 @@ tests/integration/postgres/test_sql_readonly.py
 
 - [ ] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/orders/test_order_access.py tests/contract/test_order_tools.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_access.py tests/contract/test_order_tools.py -q`
 
 - [ ] **Step 3: 实现客户作用域端口和摘要映射**
 
@@ -131,7 +118,7 @@ tests/integration/postgres/test_sql_readonly.py
 
 - [ ] **Step 4: 运行 GREEN**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/orders/test_order_access.py tests/contract/test_order_tools.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_access.py tests/contract/test_order_tools.py -q`
 
 - [ ] **Step 5: 提交订单读取边界**
 
@@ -140,11 +127,8 @@ tests/integration/postgres/test_sql_readonly.py
 ### Task 3: Operation 预览、哈希、审批和幂等
 
 **Files:**
-- Modify: `src/customer_service_agent/orders/models.py`
-- Modify: `src/customer_service_agent/orders/ports.py`
-- Modify: `src/customer_service_agent/orders/service.py`
-- Test: `tests/unit/orders/test_operation_preview.py`
-- Test: `tests/unit/orders/test_operation_execution.py`
+- Modify: `src/customer_service_agent/commerce/orders.py`
+- Test: `tests/unit/commerce/test_order_operations.py`
 
 **Interfaces:**
 - Produces: `OperationPreview(operation_id, tool_name, normalized_args, args_hash, expected_version, status)`。
@@ -164,7 +148,7 @@ tests/integration/postgres/test_sql_readonly.py
 
 - [ ] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/orders/test_operation_preview.py tests/unit/orders/test_operation_execution.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_operations.py -q`
 
 - [ ] **Step 3: 实现规范化哈希和 operation 状态机**
 
@@ -172,7 +156,7 @@ tests/integration/postgres/test_sql_readonly.py
 
 - [ ] **Step 4: 运行 GREEN**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/orders/test_operation_preview.py tests/unit/orders/test_operation_execution.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_operations.py -q`
 
 - [ ] **Step 5: 提交审批与幂等核心**
 
@@ -181,12 +165,9 @@ tests/integration/postgres/test_sql_readonly.py
 ### Task 4: 创建、修改、取消和退货服务
 
 **Files:**
-- Modify: `src/customer_service_agent/orders/service.py`
-- Modify: `src/customer_service_agent/orders/tools.py`
-- Test: `tests/unit/orders/test_create_order.py`
-- Test: `tests/unit/orders/test_update_contact.py`
-- Test: `tests/unit/orders/test_cancel_order.py`
-- Test: `tests/unit/orders/test_return_request.py`
+- Modify: `src/customer_service_agent/commerce/orders.py`
+- Create: `src/customer_service_agent/commerce/postgres.py`
+- Test: `tests/unit/commerce/test_order_commands.py`
 - Test: `tests/integration/postgres/test_orders.py`
 
 **Interfaces:**
@@ -206,7 +187,7 @@ tests/integration/postgres/test_sql_readonly.py
 
 - [ ] **Step 2: 运行四组 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/orders/test_create_order.py tests/unit/orders/test_update_contact.py tests/unit/orders/test_cancel_order.py tests/unit/orders/test_return_request.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_commands.py -q`
 
 - [ ] **Step 3: 每次只实现当前测试所需的领域 handler**
 
@@ -214,7 +195,7 @@ tests/integration/postgres/test_sql_readonly.py
 
 - [ ] **Step 4: 运行 GREEN 与 PostgreSQL 原子性集成**
 
-  Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/orders -q`
+  Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_state_machine.py tests/unit/commerce/test_order_access.py tests/unit/commerce/test_order_operations.py tests/unit/commerce/test_order_commands.py -q`
 
   Integration: `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_postgres tests/integration/postgres/test_orders.py -q`
 
@@ -227,12 +208,9 @@ tests/integration/postgres/test_sql_readonly.py
 ### Task 5: AST 白名单与只读 NL2SQL
 
 **Files:**
-- Create: `src/customer_service_agent/sql/models.py`
-- Create: `src/customer_service_agent/sql/guard.py`
-- Create: `src/customer_service_agent/sql/service.py`
-- Create: `src/customer_service_agent/sql/tools.py`
-- Create: `src/customer_service_agent/adapters/postgres_sql.py`
-- Test: `tests/unit/sql/test_guard.py`
+- Create: `src/customer_service_agent/commerce/sql.py`
+- Modify: `src/customer_service_agent/commerce/postgres.py`
+- Test: `tests/unit/commerce/test_sql_guard.py`
 - Test: `tests/contract/test_sql_tool.py`
 - Test: `tests/integration/postgres/test_sql_readonly.py`
 
@@ -258,7 +236,7 @@ tests/integration/postgres/test_sql_readonly.py
 
 - [ ] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/sql/test_guard.py tests/contract/test_sql_tool.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_sql_guard.py tests/contract/test_sql_tool.py -q`
 
 - [ ] **Step 3: 实现 AST 流水线和参数化执行**
 
@@ -266,7 +244,7 @@ tests/integration/postgres/test_sql_readonly.py
 
 - [ ] **Step 4: 运行 GREEN 与只读角色集成**
 
-  Unit/contract: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/sql tests/contract/test_sql_tool.py -q`
+  Unit/contract: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_sql_guard.py tests/contract/test_sql_tool.py -q`
 
   Integration: `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_postgres tests/integration/postgres/test_sql_readonly.py -q`
 
@@ -295,7 +273,7 @@ tests/integration/postgres/test_sql_readonly.py
 ## Plan Verification
 
 ```bash
-UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/orders tests/unit/sql tests/contract/test_order_tools.py tests/contract/test_sql_tool.py -q
+UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce tests/contract/test_order_tools.py tests/contract/test_sql_tool.py -q
 UV_CACHE_DIR=.uv-cache uv run pytest -m integration_postgres -q
 git diff --check
 ```

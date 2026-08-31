@@ -4,7 +4,7 @@
 
 **Goal:** 通过 Mem0 `AsyncMemory` 和独立 PostgreSQL/pgvector 数据库实现明确授权的偏好保存、客户隔离召回、查看、删除与冲突处理。
 
-**Architecture:** 应用层先执行明确意图、内容类型、敏感信息和工具证据校验，再调用窄化的 `MemoryStorePort`；普通对话不触发写入。生产适配器使用 Mem0 2.0.19 `AsyncMemory`、固定 PGVector collection 和独立数据库角色，单元测试使用客户隔离内存实现。记忆只能作为非指令数据注入，订单/政策/商品当前事实仍必须调用事实工具。
+**Architecture:** 目录遵循 `docs/architecture/code-layout.md`，Spec 040 只保留 `memory/service.py` 与 `memory/mem0_pg.py`。应用层先执行明确意图、内容类型、敏感信息和工具证据校验，再调用同文件内定义的 `MemoryStorePort`；生产适配器使用 Mem0 2.0.19 `AsyncMemory`、固定 PGVector collection 和独立数据库角色。记忆只能作为非指令数据注入，当前事实仍必须调用事实工具。
 
 **Tech Stack:** Python 3.13.15、Mem0 2.0.19、PostgreSQL 17、pgvector 0.8.6、psycopg3、Pydantic v2、pytest、pytest-asyncio。
 
@@ -23,12 +23,8 @@
 ## File Structure
 
 ```text
-src/customer_service_agent/memory/models.py       # MemoryRecord、来源和公开 DTO
-src/customer_service_agent/memory/policy.py       # 明确意图与敏感信息规则
-src/customer_service_agent/memory/ports.py        # MemoryStorePort、审计端口
-src/customer_service_agent/memory/service.py      # 保存、召回、列出、删除、冲突
-src/customer_service_agent/memory/tools.py        # 三个稳定工具
-src/customer_service_agent/adapters/mem0_pg.py    # AsyncMemory + PGVector
+src/customer_service_agent/memory/service.py   # DTO、策略、端口、操作、冲突、工具
+src/customer_service_agent/memory/mem0_pg.py   # AsyncMemory + PGVector
 tests/unit/memory/
 tests/contract/test_memory_tools.py
 tests/integration/postgres/test_mem0_pgvector.py
@@ -37,7 +33,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 ### Task 1: 明确意图、允许类型与敏感信息策略
 
 **Files:**
-- Create: `src/customer_service_agent/memory/policy.py`
+- Create: `src/customer_service_agent/memory/service.py`
 - Test: `tests/unit/memory/test_policy.py`
 
 **Interfaces:**
@@ -79,8 +75,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 ### Task 2: 记忆 DTO、来源证据与存储端口
 
 **Files:**
-- Create: `src/customer_service_agent/memory/models.py`
-- Create: `src/customer_service_agent/memory/ports.py`
+- Modify: `src/customer_service_agent/memory/service.py`
 - Test: `tests/unit/memory/test_models.py`
 - Test: `tests/contract/test_memory_tools.py`
 
@@ -128,8 +123,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 ### Task 3: 保存、召回、列出和删除服务
 
 **Files:**
-- Create: `src/customer_service_agent/memory/service.py`
-- Create: `src/customer_service_agent/memory/tools.py`
+- Modify: `src/customer_service_agent/memory/service.py`
 - Test: `tests/unit/memory/test_service.py`
 - Modify: `tests/contract/test_memory_tools.py`
 
@@ -209,7 +203,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 ### Task 5: Mem0 AsyncMemory + PGVector 适配与隔离
 
 **Files:**
-- Create: `src/customer_service_agent/adapters/mem0_pg.py`
+- Create: `src/customer_service_agent/memory/mem0_pg.py`
 - Test: `tests/unit/memory/test_mem0_adapter_config.py`
 - Test: `tests/integration/postgres/test_mem0_pgvector.py`
 

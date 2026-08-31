@@ -4,7 +4,7 @@
 
 **Goal:** 建立可复现的测试分层守卫、约 60 条版本化评测场景、确定性评分器、质量门禁、脱敏 Trace 和显式 opt-in 的 LangSmith 实验。
 
-**Architecture:** 评测数据以版本化 JSONL 为事实源，加载时做严格 schema 校验。确定性评分器先判安全、工具、引用、状态和检索命中；LLM 裁判只在 DG-007 批准后补充知识质量，不能覆盖安全失败。Trace 通过独立脱敏映射器发送到可替换 `TraceSink`，LangSmith 不可用不阻断核心服务。
+**Architecture:** 目录遵循 `docs/architecture/code-layout.md`，Spec 050 只保留 `quality/evaluation.py` 与 `quality/observability.py`。评测数据以版本化 JSONL 为事实源；确定性评分器先判安全、工具、引用、状态和检索命中，LLM 裁判不能覆盖安全失败。Trace 通过同模块内的脱敏映射器发送到可替换 `TraceSink`，LangSmith 不可用不阻断核心服务。
 
 **Tech Stack:** Python 3.13.15、pytest、Pydantic v2、LangSmith、标准库统计函数、JSONL。
 
@@ -22,18 +22,11 @@
 ## File Structure
 
 ```text
-src/customer_service_agent/evaluation/models.py      # EvalCase、RunRecord、GateReport
-src/customer_service_agent/evaluation/loader.py      # JSONL schema/版本校验
-src/customer_service_agent/evaluation/scorers.py     # 确定性评分器
-src/customer_service_agent/evaluation/metrics.py     # 聚合、P95、门禁
-src/customer_service_agent/observability/models.py   # Trace 元数据与层级
-src/customer_service_agent/observability/redaction.py# 脱敏和大小限制
-src/customer_service_agent/observability/sink.py     # TraceSink 与降级
-src/customer_service_agent/adapters/langsmith.py     # LangSmith 上传/实验
-evals/datasets/customer_service_v1.jsonl             # 60 条固定场景
-evals/datasets/CHANGELOG.md                           # 数据集版本变更
-tests/unit/evaluation/
-tests/unit/observability/
+src/customer_service_agent/quality/evaluation.py    # schema、加载、评分、指标、报告
+src/customer_service_agent/quality/observability.py # Trace、脱敏、sink、LangSmith
+evals/datasets/customer_service_v1.jsonl            # 60 条固定场景
+evals/datasets/CHANGELOG.md                          # 数据集版本变更
+tests/unit/quality/
 tests/contract/test_eval_dataset.py
 tests/live/test_langsmith_upload.py
 ```
@@ -43,7 +36,7 @@ tests/live/test_langsmith_upload.py
 **Files:**
 - Modify: `pyproject.toml`
 - Create: `tests/conftest.py`
-- Create: `tests/unit/evaluation/test_test_boundaries.py`
+- Create: `tests/unit/quality/test_test_boundaries.py`
 
 **Interfaces:**
 - Produces: pytest markers 与 `ExternalAccessGuard`。
@@ -61,7 +54,7 @@ tests/live/test_langsmith_upload.py
 
 - [ ] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/evaluation/test_test_boundaries.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_test_boundaries.py -q`
 
 - [ ] **Step 3: 实现最小测试守卫**
 
@@ -69,7 +62,7 @@ tests/live/test_langsmith_upload.py
 
 - [ ] **Step 4: 运行 GREEN**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/evaluation/test_test_boundaries.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_test_boundaries.py -q`
 
 - [ ] **Step 5: 提交测试边界**
 
@@ -78,8 +71,7 @@ tests/live/test_langsmith_upload.py
 ### Task 2: 评测样本 schema 与 60 条固定数据集
 
 **Files:**
-- Create: `src/customer_service_agent/evaluation/models.py`
-- Create: `src/customer_service_agent/evaluation/loader.py`
+- Create: `src/customer_service_agent/quality/evaluation.py`
 - Create: `evals/datasets/customer_service_v1.jsonl`
 - Create: `evals/datasets/CHANGELOG.md`
 - Test: `tests/contract/test_eval_dataset.py`
@@ -123,10 +115,8 @@ tests/live/test_langsmith_upload.py
 ### Task 3: 确定性评分器与质量门禁
 
 **Files:**
-- Create: `src/customer_service_agent/evaluation/scorers.py`
-- Create: `src/customer_service_agent/evaluation/metrics.py`
-- Test: `tests/unit/evaluation/test_scorers.py`
-- Test: `tests/unit/evaluation/test_metrics.py`
+- Modify: `src/customer_service_agent/quality/evaluation.py`
+- Test: `tests/unit/quality/test_evaluation_metrics.py`
 
 **Interfaces:**
 - Produces: `score_tools`、`score_citations`、`score_state`、`score_hit_at_k`。
@@ -145,7 +135,7 @@ tests/live/test_langsmith_upload.py
 
 - [ ] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/evaluation/test_scorers.py tests/unit/evaluation/test_metrics.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_evaluation_metrics.py -q`
 
 - [ ] **Step 3: 实现纯函数评分和显式分母**
 
@@ -158,7 +148,7 @@ tests/live/test_langsmith_upload.py
 
 - [ ] **Step 4: 运行 GREEN**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/evaluation/test_scorers.py tests/unit/evaluation/test_metrics.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_evaluation_metrics.py -q`
 
 - [ ] **Step 5: 提交评分器**
 
@@ -167,11 +157,8 @@ tests/live/test_langsmith_upload.py
 ### Task 4: Trace 层级、脱敏与降级
 
 **Files:**
-- Create: `src/customer_service_agent/observability/models.py`
-- Create: `src/customer_service_agent/observability/redaction.py`
-- Create: `src/customer_service_agent/observability/sink.py`
-- Test: `tests/unit/observability/test_redaction.py`
-- Test: `tests/unit/observability/test_sink.py`
+- Create: `src/customer_service_agent/quality/observability.py`
+- Test: `tests/unit/quality/test_observability.py`
 
 **Interfaces:**
 - Produces: `TraceRecord(run_kind, request_id, thread_id, tool_name, sizes, metadata)`。
@@ -192,7 +179,7 @@ tests/live/test_langsmith_upload.py
 
 - [ ] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/observability/test_redaction.py tests/unit/observability/test_sink.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_observability.py -q`
 
 - [ ] **Step 3: 实现 allowlist 元数据和大小预算**
 
@@ -200,7 +187,7 @@ tests/live/test_langsmith_upload.py
 
 - [ ] **Step 4: 运行 GREEN**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/observability/test_redaction.py tests/unit/observability/test_sink.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_observability.py -q`
 
 - [ ] **Step 5: 提交可观测性核心**
 
@@ -209,10 +196,9 @@ tests/live/test_langsmith_upload.py
 ### Task 5: LangSmith 实验、LLM 裁判门和失败报告
 
 **Files:**
-- Create: `src/customer_service_agent/adapters/langsmith.py`
-- Create: `src/customer_service_agent/evaluation/report.py`
-- Test: `tests/unit/evaluation/test_judge_gate.py`
-- Test: `tests/unit/evaluation/test_report.py`
+- Modify: `src/customer_service_agent/quality/evaluation.py`
+- Modify: `src/customer_service_agent/quality/observability.py`
+- Test: `tests/unit/quality/test_evaluation_report.py`
 - Test: `tests/live/test_langsmith_upload.py`
 
 **Interfaces:**
@@ -232,7 +218,7 @@ tests/live/test_langsmith_upload.py
 
 - [ ] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/evaluation/test_judge_gate.py tests/unit/evaluation/test_report.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_evaluation_report.py -q`
 
 - [ ] **Step 3: 实现决策门、失败优先级和 opt-in 上传**
 
@@ -240,7 +226,7 @@ tests/live/test_langsmith_upload.py
 
 - [ ] **Step 4: 运行 GREEN 和显式 live 验证**
 
-  Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/evaluation/test_judge_gate.py tests/unit/evaluation/test_report.py -q`
+  Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_evaluation_report.py -q`
 
   Live（仅用户批准 DG-007 并提供 opt-in 时）：`UV_CACHE_DIR=.uv-cache uv run pytest -m live_langsmith tests/live/test_langsmith_upload.py -q`
 
@@ -265,7 +251,7 @@ tests/live/test_langsmith_upload.py
 ## Plan Verification
 
 ```bash
-UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/evaluation tests/unit/observability tests/contract/test_eval_dataset.py -q
+UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality tests/contract/test_eval_dataset.py -q
 UV_CACHE_DIR=.uv-cache uv run pytest -m eval_gate -q
 git diff --check
 ```

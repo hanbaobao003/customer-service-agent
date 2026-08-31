@@ -4,7 +4,7 @@
 
 **Goal:** 实现统一可引用检索契约，以及常规混合 RAG、RAPTOR、GraphRAG、受控联网搜索和原子索引发布流程。
 
-**Architecture:** 在线检索只依赖只读端口并返回“有限模型证据 + 完整 artifact”。常规 RAG 与 RAPTOR 使用隔离的 Milvus collection，GraphRAG 只执行注册的 Neo4j 查询模板，联网搜索只处理外部时效信息。索引构建与在线查询进程分离，通过版本指针原子发布。
+**Architecture:** 目录遵循 `docs/architecture/code-layout.md`，Spec 020 的模型、算法、外部适配和工具全部位于 `retrieval/`。在线检索返回“有限模型证据 + 完整 artifact”；常规 RAG 与 RAPTOR 使用隔离的 Milvus collection，GraphRAG 只执行注册的 Neo4j 查询模板，联网搜索只处理外部时效信息。索引构建与在线查询进程分离，通过版本指针原子发布。
 
 **Tech Stack:** Python 3.13.15、Milvus 3.0.0/PyMilvus 3.0.1、BGE-M3、Neo4j 2026.07.1、neo4j-graphrag 1.19.0、Tavily、Pydantic v2、pytest。
 
@@ -22,18 +22,12 @@
 ## File Structure
 
 ```text
-src/customer_service_agent/retrieval/models.py       # 证据、citation、artifact DTO
-src/customer_service_agent/retrieval/citations.py    # 引用存在性与支持关系校验
-src/customer_service_agent/retrieval/hybrid.py       # dense/BM25 融合与 small-to-big
-src/customer_service_agent/retrieval/raptor.py       # 树节点与下钻
-src/customer_service_agent/retrieval/graph.py        # 白名单模板与路径证据
-src/customer_service_agent/retrieval/web.py          # 外部时效搜索边界
-src/customer_service_agent/retrieval/tools.py        # 四个稳定工具适配
-src/customer_service_agent/indexing/models.py        # 构建报告和发布清单
-src/customer_service_agent/indexing/pipeline.py      # 候选构建、校验、发布状态机
-src/customer_service_agent/adapters/milvus.py        # Milvus 端口实现
-src/customer_service_agent/adapters/neo4j.py         # Neo4j 模板执行
-src/customer_service_agent/adapters/tavily.py        # Tavily 适配
+src/customer_service_agent/retrieval/models.py   # 证据、citation、artifact 与校验
+src/customer_service_agent/retrieval/hybrid.py   # dense/BM25、Milvus、small-to-big
+src/customer_service_agent/retrieval/raptor.py   # 树节点、Milvus 查询与下钻
+src/customer_service_agent/retrieval/graph.py    # Neo4j 白名单与路径证据
+src/customer_service_agent/retrieval/indexing.py # 构建报告、校验、发布状态机
+src/customer_service_agent/retrieval/tools.py    # 四个工具与 Tavily 边界
 tests/unit/retrieval/
 tests/contract/test_retrieval_tools.py
 tests/integration/milvus/
@@ -44,7 +38,6 @@ tests/integration/neo4j/
 
 **Files:**
 - Create: `src/customer_service_agent/retrieval/models.py`
-- Create: `src/customer_service_agent/retrieval/citations.py`
 - Test: `tests/unit/retrieval/test_models.py`
 - Test: `tests/unit/retrieval/test_citations.py`
 - Test: `tests/contract/test_retrieval_tools.py`
@@ -99,9 +92,8 @@ tests/integration/neo4j/
 
 **Files:**
 - Create: `src/customer_service_agent/retrieval/hybrid.py`
-- Create: `src/customer_service_agent/adapters/milvus.py`
 - Test: `tests/unit/retrieval/test_hybrid.py`
-- Test: `tests/integration/milvus/test_hybrid_search.py`
+- Test: `tests/integration/milvus/test_hybrid.py`
 
 **Interfaces:**
 - Produces: `HybridSearchPort.search_dense/search_sparse`。
@@ -147,7 +139,7 @@ tests/integration/neo4j/
 
   Integration 在测试 collection 中写入固定 child/parent 语料，验证 BGE-M3 dense、Milvus BM25、metadata/version 过滤和 parent 返回：
 
-  `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_hybrid_search.py -q`
+  `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_hybrid.py -q`
 
 - [ ] **Step 5: 提交混合检索切片**
 
@@ -158,7 +150,7 @@ tests/integration/neo4j/
 **Files:**
 - Create: `src/customer_service_agent/retrieval/raptor.py`
 - Test: `tests/unit/retrieval/test_raptor.py`
-- Test: `tests/integration/milvus/test_raptor_search.py`
+- Test: `tests/integration/milvus/test_raptor.py`
 
 **Interfaces:**
 - Produces: `RaptorNode(node_id, level, text, child_ids, source_ids, data_version)`。
@@ -186,7 +178,7 @@ tests/integration/neo4j/
 
   Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_raptor.py -q`
 
-  Integration: `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_raptor_search.py -q`
+  Integration: `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_raptor.py -q`
 
 - [ ] **Step 5: 提交 RAPTOR 切片**
 
@@ -196,12 +188,10 @@ tests/integration/neo4j/
 
 **Files:**
 - Create: `src/customer_service_agent/retrieval/graph.py`
-- Create: `src/customer_service_agent/retrieval/web.py`
-- Create: `src/customer_service_agent/adapters/neo4j.py`
-- Create: `src/customer_service_agent/adapters/tavily.py`
+- Create: `src/customer_service_agent/retrieval/tools.py`
 - Test: `tests/unit/retrieval/test_graph.py`
 - Test: `tests/unit/retrieval/test_web_policy.py`
-- Test: `tests/integration/neo4j/test_graph_queries.py`
+- Test: `tests/integration/neo4j/test_graph.py`
 
 **Interfaces:**
 - Produces: `GraphQueryRegistry.execute(template_id, parameters)`。
@@ -230,7 +220,7 @@ tests/integration/neo4j/
 
   Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_graph.py tests/unit/retrieval/test_web_policy.py -q`
 
-  Integration: `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_neo4j tests/integration/neo4j/test_graph_queries.py -q`
+  Integration: `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_neo4j tests/integration/neo4j/test_graph.py -q`
 
   实际 Tavily 仅在 `live_web` marker 和显式开关下运行。
 
@@ -241,9 +231,8 @@ tests/integration/neo4j/
 ### Task 5: 离线构建、报告与原子发布
 
 **Files:**
-- Create: `src/customer_service_agent/indexing/models.py`
-- Create: `src/customer_service_agent/indexing/pipeline.py`
-- Create: `src/customer_service_agent/retrieval/tools.py`
+- Create: `src/customer_service_agent/retrieval/indexing.py`
+- Modify: `src/customer_service_agent/retrieval/tools.py`
 - Test: `tests/unit/retrieval/test_index_pipeline.py`
 - Test: `tests/contract/test_retrieval_tools.py`
 

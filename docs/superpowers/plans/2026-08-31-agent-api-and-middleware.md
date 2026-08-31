@@ -4,7 +4,7 @@
 
 **Goal:** 建立单 LangChain 客服 Agent 的可信上下文、稳定 API/SSE 契约、异步中间件、HITL 恢复和 PostgreSQL 检查点基础。
 
-**Architecture:** 应用层以 `CustomerService` 为唯一入口，FastAPI 与 CLI 只做适配。可信身份通过 `RuntimeContext` 注入；线程绑定、运行锁和检查点通过端口隔离，单元测试使用内存实现，生产适配器使用 PostgreSQL。SSE 由应用事件映射器生成，领域工具不依赖 LangGraph stream writer。
+**Architecture:** 目录遵循 `docs/architecture/code-layout.md`，Spec 010 的生产行为集中在 `agent_api/`。应用层以 `CustomerService` 为唯一入口，FastAPI 与 CLI 只做适配；可信身份通过 `RuntimeContext` 注入，单元测试使用内存实现，生产检查点使用 PostgreSQL。SSE 由 `agent_api/api.py` 统一编码，领域工具不依赖 LangGraph stream writer。
 
 **Tech Stack:** Python 3.13.15、LangChain 1.3.18、LangGraph 1.2.11、FastAPI、Pydantic v2、psycopg3、langgraph-checkpoint-postgres、pytest、pytest-asyncio、uv。
 
@@ -22,34 +22,27 @@
 ## File Structure
 
 ```text
-pyproject.toml                                  # Python、依赖、pytest/ruff 配置
-src/customer_service_agent/__init__.py         # 包版本
-src/customer_service_agent/context.py          # RuntimeContext 与可信上下文构造
-src/customer_service_agent/errors.py           # 稳定错误码和公开错误 envelope
-src/customer_service_agent/events.py           # 应用事件、SSE envelope 与序号
-src/customer_service_agent/ports/runtime.py     # 线程绑定、运行锁、检查点端口
-src/customer_service_agent/runtime/service.py   # CustomerService 编排
-src/customer_service_agent/runtime/middleware.py# 调用上限、重试分类、审计适配
-src/customer_service_agent/runtime/factory.py   # create_agent 组装
-src/customer_service_agent/runtime/prompt.py    # 版本化中文系统提示词
-src/customer_service_agent/adapters/postgres.py # 线程绑定与 AsyncPostgresSaver
-src/customer_service_agent/api/app.py           # FastAPI 应用工厂
-src/customer_service_agent/api/schemas.py       # 请求/响应 schema
-src/customer_service_agent/api/sse.py           # text/event-stream 编码
-src/customer_service_agent/cli.py               # CLI 适配器
-tests/unit/agent/                               # 上下文、事件、中间件、服务测试
-tests/contract/                                 # API、SSE、工具 schema 契约
-tests/integration/postgres/                     # 检查点暂停/恢复与绑定测试
+pyproject.toml                                      # Python、依赖、pytest/ruff 配置
+src/customer_service_agent/config.py               # 配置 schema 与决策门
+src/customer_service_agent/cli.py                  # CLI 适配器
+src/customer_service_agent/shared/models.py        # RuntimeContext 与应用事件
+src/customer_service_agent/shared/errors.py        # 稳定错误码和公开 envelope
+src/customer_service_agent/agent_api/service.py    # prompt、Agent 工厂、CustomerService、checkpointer
+src/customer_service_agent/agent_api/middleware.py # 调用上限、重试、HITL、摘要
+src/customer_service_agent/agent_api/api.py        # FastAPI、schema、SSE、decision、健康检查
+tests/unit/agent_api/                               # 上下文、事件、中间件、服务测试
+tests/contract/                                     # API、SSE、工具 schema 契约
+tests/integration/postgres/                         # 检查点暂停/恢复与绑定测试
 ```
 
 ### Task 1: 项目测试入口与可信运行时上下文
 
 **Files:**
 - Create: `pyproject.toml`
-- Create: `src/customer_service_agent/__init__.py`
-- Create: `src/customer_service_agent/context.py`
-- Create: `src/customer_service_agent/errors.py`
-- Test: `tests/unit/agent/test_context.py`
+- Create: `src/customer_service_agent/config.py`
+- Create: `src/customer_service_agent/shared/models.py`
+- Create: `src/customer_service_agent/shared/errors.py`
+- Test: `tests/unit/agent_api/test_context.py`
 
 **Interfaces:**
 - Produces: `RuntimeContext(customer_id, thread_id, request_id, locale, channel)`。
@@ -69,7 +62,7 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 
 - [ ] **Step 2: 运行 RED 并确认失败原因**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent/test_context.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_context.py -q`
 
   Expected: pytest 成功收集测试，断言因 `RuntimeContext.trusted` 尚未实现或尚未拒绝空身份而失败；依赖安装或导入环境错误必须先修复再重跑 RED。
 
@@ -98,7 +91,7 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 
 - [ ] **Step 4: 运行 GREEN 与上下文回归**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent/test_context.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_context.py -q`
 
   Expected: 空客户、空线程、空请求 ID 分别被拒绝；有效 API/CLI 上下文保持不可变。
 
@@ -109,10 +102,9 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 ### Task 2: 线程绑定、单运行锁与应用服务
 
 **Files:**
-- Create: `src/customer_service_agent/ports/runtime.py`
-- Create: `src/customer_service_agent/runtime/service.py`
-- Test: `tests/unit/agent/test_thread_access.py`
-- Test: `tests/unit/agent/test_customer_service.py`
+- Create: `src/customer_service_agent/agent_api/service.py`
+- Test: `tests/unit/agent_api/test_thread_access.py`
+- Test: `tests/unit/agent_api/test_customer_service.py`
 
 **Interfaces:**
 - Consumes: `RuntimeContext`、`ServiceError`。
@@ -137,7 +129,7 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 
 - [ ] **Step 2: 验证两个 RED 都由行为缺失造成**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent/test_thread_access.py tests/unit/agent/test_customer_service.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_thread_access.py tests/unit/agent_api/test_customer_service.py -q`
 
   Expected: 客户绑定或运行锁断言失败，不是 asyncio fixture 错误。
 
@@ -158,7 +150,7 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 
 - [ ] **Step 4: 运行 GREEN 和取消回归**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent/test_thread_access.py tests/unit/agent/test_customer_service.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_thread_access.py tests/unit/agent_api/test_customer_service.py -q`
 
   Expected: 客户不匹配、同线程忙、不同线程并行和取消释放锁均通过。
 
@@ -169,9 +161,9 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 ### Task 3: 应用事件与 SSE 契约
 
 **Files:**
-- Create: `src/customer_service_agent/events.py`
-- Create: `src/customer_service_agent/api/sse.py`
-- Test: `tests/unit/agent/test_events.py`
+- Modify: `src/customer_service_agent/shared/models.py`
+- Create: `src/customer_service_agent/agent_api/api.py`
+- Test: `tests/unit/agent_api/test_events.py`
 - Test: `tests/contract/test_sse_contract.py`
 
 **Interfaces:**
@@ -192,7 +184,7 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 
 - [ ] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent/test_events.py tests/contract/test_sse_contract.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_events.py tests/contract/test_sse_contract.py -q`
 
   Expected: 序号/终止或脱敏断言失败。
 
@@ -214,7 +206,7 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 
 - [ ] **Step 4: 运行 GREEN**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent/test_events.py tests/contract/test_sse_contract.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_events.py tests/contract/test_sse_contract.py -q`
 
   Expected: 事件类型、严格递增、终止语义和敏感字段拒绝全部通过。
 
@@ -225,8 +217,7 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 ### Task 4: FastAPI、CLI、确认恢复与健康检查
 
 **Files:**
-- Create: `src/customer_service_agent/api/schemas.py`
-- Create: `src/customer_service_agent/api/app.py`
+- Modify: `src/customer_service_agent/agent_api/api.py`
 - Create: `src/customer_service_agent/cli.py`
 - Test: `tests/contract/test_message_api.py`
 - Test: `tests/contract/test_decision_api.py`
@@ -275,12 +266,10 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 ### Task 5: 异步中间件、Agent 工厂与 PostgreSQL 恢复
 
 **Files:**
-- Create: `src/customer_service_agent/runtime/middleware.py`
-- Create: `src/customer_service_agent/runtime/prompt.py`
-- Create: `src/customer_service_agent/runtime/factory.py`
-- Create: `src/customer_service_agent/adapters/postgres.py`
-- Test: `tests/unit/agent/test_middleware.py`
-- Test: `tests/unit/agent/test_handoff.py`
+- Create: `src/customer_service_agent/agent_api/middleware.py`
+- Modify: `src/customer_service_agent/agent_api/service.py`
+- Test: `tests/unit/agent_api/test_middleware.py`
+- Test: `tests/unit/agent_api/test_handoff.py`
 - Test: `tests/contract/test_prompt_contract.py`
 - Test: `tests/contract/test_agent_tools.py`
 - Test: `tests/integration/postgres/test_checkpoint_resume.py`
@@ -303,7 +292,7 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 
 - [ ] **Step 2: 运行 RED**
 
-  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent/test_middleware.py tests/unit/agent/test_handoff.py tests/contract/test_prompt_contract.py tests/contract/test_agent_tools.py -q`
+  Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_middleware.py tests/unit/agent_api/test_handoff.py tests/contract/test_prompt_contract.py tests/contract/test_agent_tools.py -q`
 
   Expected: 中间件或工厂行为缺失导致断言失败。
 
@@ -313,7 +302,7 @@ tests/integration/postgres/                     # 检查点暂停/恢复与绑�
 
 - [ ] **Step 4: 运行单元/契约 GREEN，再执行 PostgreSQL 集成 RED→GREEN**
 
-  Run unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent/test_middleware.py tests/unit/agent/test_handoff.py tests/contract/test_prompt_contract.py tests/contract/test_agent_tools.py -q`
+  Run unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_middleware.py tests/unit/agent_api/test_handoff.py tests/contract/test_prompt_contract.py tests/contract/test_agent_tools.py -q`
 
   Integration RED 在未调用 `.setup()` 或未持久化绑定时失败；最小实现使用 psycopg3 `autocommit=True`、`dict_row` 和 `AsyncPostgresSaver.setup()`。随后运行：
 
