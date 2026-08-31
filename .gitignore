@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.idea/
+.venv/
+.uv-cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+pytest-report.xml
