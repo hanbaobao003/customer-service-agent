@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to execute this roadmap milestone by milestone. Entering a feature task also requires `superpowers:test-driven-development`; the five child plans remain the source of exact RED→GREEN steps.
 
-**状态：** 已批准，M0 已完成，待 M1 实施
+**状态：** 已批准，M0–M1 已完成，待 M2 实施
 
 **版本：** 1.0
 
@@ -77,6 +77,8 @@ DG-001 的批准版本记录在 [M0 运行时与 Docker 兼容性基线](../../d
 - 未重建、删除或升级任何现有容器、数据库、volume 或 collection；临时启动的现有容器已恢复原状态。
 
 ### M1：工程骨架与测试守卫
+
+**状态：** 已完成（2026-08-31）
 
 **前置：** M0 完成，DG-001 已批准。
 

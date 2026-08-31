@@ -28,4 +28,4 @@
 
 - 已验证：纯内存运行时上下文校验、不可变性和公开错误序列化。
 - 未验证：FastAPI/CLI 身份注入、PostgreSQL 线程绑定、Docker、真实模型和外部服务。
-- 提交：`test: establish trusted runtime context`（本记录随该提交保存）。
+- 提交：`4cc26e7 test: establish trusted runtime context`。

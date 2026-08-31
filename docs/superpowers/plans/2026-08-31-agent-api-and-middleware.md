@@ -48,7 +48,7 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
 - Produces: `RuntimeContext(customer_id, thread_id, request_id, locale, channel)`。
 - Produces: `ServiceError(code, message, retryable, request_id)`；公开序列化不得包含内部异常。
 
-- [ ] **Step 1: 建立测试配置并写第一个失败测试**
+- [x] **Step 1: 建立测试配置并写第一个失败测试**
 
   `pyproject.toml` 固定 Python `==3.13.*`、已批准的 LangChain/LangGraph 版本和 pytest markers；`.gitignore` 忽略 `.venv/`、`.uv-cache/`、缓存和测试报告，不忽略 Spec、计划或测试数据。测试表达希望的可信构造接口：
 
@@ -60,13 +60,13 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
           )
   ```
 
-- [ ] **Step 2: 运行 RED 并确认失败原因**
+- [x] **Step 2: 运行 RED 并确认失败原因**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_context.py -q`
 
   Expected: pytest 成功收集测试，断言因 `RuntimeContext.trusted` 尚未实现或尚未拒绝空身份而失败；依赖安装或导入环境错误必须先修复再重跑 RED。
 
-- [ ] **Step 3: 写最小上下文与错误类型**
+- [x] **Step 3: 写最小上下文与错误类型**
 
   ```python
   @dataclass(frozen=True, slots=True)
@@ -89,13 +89,13 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
 
   `ServiceError` 使用受控 `code` 和用户消息，内部 `cause` 只能用于日志/Trace，不进入 `to_public_dict()`。
 
-- [ ] **Step 4: 运行 GREEN 与上下文回归**
+- [x] **Step 4: 运行 GREEN 与上下文回归**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/agent_api/test_context.py -q`
 
   Expected: 空客户、空线程、空请求 ID 分别被拒绝；有效 API/CLI 上下文保持不可变。
 
-- [ ] **Step 5: 提交基础测试入口**
+- [x] **Step 5: 提交基础测试入口**
 
   Commit: `test: establish trusted runtime context`
 

@@ -42,7 +42,7 @@ tests/live/test_langsmith_upload.py
 - Produces: pytest markers 与 `ExternalAccessGuard`。
 - Produces: `requires_opt_in(env_name)` fixture helper。
 
-- [ ] **Step 1: 写默认测试禁止 socket 和未知 marker RED**
+- [x] **Step 1: 写默认测试禁止 socket 和未知 marker RED**
 
   ```python
   def test_unit_test_cannot_open_network_socket(external_access_guard):
@@ -52,19 +52,19 @@ tests/live/test_langsmith_upload.py
 
   配置测试断言所有计划 marker 已注册；live 测试缺少对应环境开关时为 skipped，不是 failed 或静默执行。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_test_boundaries.py -q`
 
-- [ ] **Step 3: 实现最小测试守卫**
+- [x] **Step 3: 实现最小测试守卫**
 
   守卫只在 unit/contract 测试生效，Docker/live marker 明确解除对应限制；解除不提供凭证，只允许测试读取预先配置的引用。pytest 设置 `--strict-markers`。
 
-- [ ] **Step 4: 运行 GREEN**
+- [x] **Step 4: 运行 GREEN**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_test_boundaries.py -q`
 
-- [ ] **Step 5: 提交测试边界**
+- [x] **Step 5: 提交测试边界**
 
   Commit: `test: enforce isolated verification layers`
 
