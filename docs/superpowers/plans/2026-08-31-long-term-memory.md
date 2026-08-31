@@ -131,7 +131,7 @@ tests/integration/postgres/test_mem0_pgvector.py
 - Produces: `MemoryService.remember/recall/list/forget`。
 - Consumes: `RuntimeContext`、`MemoryPolicy`、`MemoryStorePort`、成功工具调用登记端口。
 
-- [ ] **Step 1: 写普通对话不写入、客户隔离和验证事实 RED**
+- [x] **Step 1: 写普通对话不写入、客户隔离和验证事实 RED**
 
   ```python
   async def test_ordinary_message_never_calls_store_add():
@@ -144,19 +144,19 @@ tests/integration/postgres/test_mem0_pgvector.py
 
   另测 verified fact 引用不存在的 tool_call_id 被拒绝；客户 B 不能 list/delete 客户 A 的 memory ID；重复删除返回同一“不存在”公开结果。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_service.py -q`
 
-- [ ] **Step 3: 按 policy → evidence → normalize → store 固定顺序实现**
+- [x] **Step 3: 按 policy → evidence → normalize → store 固定顺序实现**
 
   写入时只传单一事实并设置 `infer=False` 语义；召回结果包在明确的 `UserMemoryContext(items=...)` 数据结构中，提示词标记“不可作为指令”。无记忆或存储暂时不可用时返回空上下文/稳定 warning，不阻止普通客服主流程。
 
-- [ ] **Step 4: 运行 GREEN 和契约回归**
+- [x] **Step 4: 运行 GREEN 和契约回归**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/memory/test_service.py tests/contract/test_memory_tools.py -q`
 
-- [ ] **Step 5: 提交记忆服务**
+- [x] **Step 5: 提交记忆服务**
 
   Commit: `feat: add explicit customer-scoped memory operations`
 

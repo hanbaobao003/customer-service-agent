@@ -2,11 +2,14 @@
 
 import re
 from collections.abc import Sequence
+from collections.abc import Callable
 from datetime import datetime
 from enum import StrEnum
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from customer_service_agent.shared.models import RuntimeContext
 
 
 class MemoryIntent(StrEnum):
@@ -112,6 +115,7 @@ class ForgetMemoryRequest(_MemoryModel):
 class DeleteResult(_MemoryModel):
     memory_id: str
     deleted: bool
+    category: str | None = None
 
 
 class MemoryStorePort(Protocol):
@@ -138,6 +142,207 @@ class MemoryStorePort(Protocol):
         customer_id: str,
         memory_id: str,
     ) -> DeleteResult: ...
+
+
+class ToolEvidencePort(Protocol):
+    async def verified_at(
+        self,
+        *,
+        context: RuntimeContext,
+        tool_name: str,
+        tool_call_id: str,
+    ) -> datetime | None: ...
+
+
+class MemoryAuditPort(Protocol):
+    async def record(
+        self,
+        *,
+        action: str,
+        customer_id: str,
+        memory_id: str,
+        category: str | None,
+        result: str,
+    ) -> None: ...
+
+
+class MemoryPolicyError(Exception):
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+class MemoryVerificationRequired(MemoryPolicyError):
+    pass
+
+
+class MemoryStoreUnavailable(Exception):
+    code = "MEMORY_STORE_UNAVAILABLE"
+
+
+class UserMemoryContext(_MemoryModel):
+    items: tuple[MemorySummary, ...] = ()
+    treat_as_data_not_instructions: Literal[True] = True
+    current_facts_require_tool_verification: Literal[True] = True
+    warning: str | None = None
+
+
+class MemoryService:
+    def __init__(
+        self,
+        *,
+        store: MemoryStorePort,
+        policy: "MemoryPolicy",
+        tool_evidence: ToolEvidencePort,
+        audit: MemoryAuditPort,
+        clock: Callable[[], datetime],
+        id_generator: Callable[[], str],
+    ) -> None:
+        self._store = store
+        self._policy = policy
+        self._tool_evidence = tool_evidence
+        self._audit = audit
+        self._clock = clock
+        self._id_generator = id_generator
+
+    async def remember(
+        self,
+        context: RuntimeContext,
+        *,
+        user_message: str,
+        request: RememberMemoryRequest,
+    ) -> MemorySummary:
+        decision = self._policy.evaluate(
+            message=user_message,
+            kind=request.kind.value,
+            content=request.content,
+        )
+        if not decision.allowed or decision.intent is not MemoryIntent.SAVE:
+            raise MemoryPolicyError(
+                decision.code or "MEMORY_EXPLICIT_INTENT_REQUIRED"
+            )
+
+        now = self._clock()
+        source = MemorySource(
+            type=MemorySourceType.EXPLICIT_USER_INSTRUCTION,
+            thread_id=context.thread_id,
+            request_id=context.request_id,
+        )
+        if request.kind is MemoryKind.VERIFIED_FACT:
+            reference = request.verification
+            if (
+                reference is None
+                or not reference.tool_name
+                or not reference.tool_call_id
+            ):
+                raise MemoryVerificationRequired("MEMORY_VERIFICATION_REQUIRED")
+            verified_at = await self._tool_evidence.verified_at(
+                context=context,
+                tool_name=reference.tool_name,
+                tool_call_id=reference.tool_call_id,
+            )
+            if verified_at is None:
+                raise MemoryVerificationRequired("MEMORY_VERIFICATION_REQUIRED")
+            source = MemorySource(
+                type=MemorySourceType.VERIFIED_TOOL_RESULT,
+                thread_id=context.thread_id,
+                request_id=context.request_id,
+                tool_name=reference.tool_name,
+                verified_at=verified_at,
+            )
+
+        record = MemoryRecord(
+            memory_id=self._id_generator(),
+            customer_id=context.customer_id,
+            kind=request.kind,
+            content=_normalize_fact(request.content),
+            source=source,
+            created_at=now,
+            updated_at=now,
+            category=request.category.strip(),
+        )
+        memory_id = await self._store.add(
+            customer_id=context.customer_id,
+            record=record,
+        )
+        saved = record.model_copy(update={"memory_id": memory_id})
+        await self._audit.record(
+            action="remember",
+            customer_id=context.customer_id,
+            memory_id=memory_id,
+            category=saved.category,
+            result="created",
+        )
+        return MemorySummary.from_record(saved)
+
+    async def recall(
+        self,
+        context: RuntimeContext,
+        *,
+        query: str,
+        limit: int,
+    ) -> UserMemoryContext:
+        if not query.strip() or limit < 1:
+            raise ValueError("query must not be blank and limit must be positive")
+        try:
+            records = await self._store.search(
+                customer_id=context.customer_id,
+                query=query,
+                limit=limit,
+            )
+        except MemoryStoreUnavailable:
+            return UserMemoryContext(warning="MEMORY_STORE_UNAVAILABLE")
+        return UserMemoryContext(
+            items=tuple(MemorySummary.from_record(item) for item in records)
+        )
+
+    async def list(
+        self,
+        context: RuntimeContext,
+        *,
+        category: str | None = None,
+    ) -> tuple[MemorySummary, ...]:
+        records = await self._store.list(
+            customer_id=context.customer_id,
+            category=category,
+        )
+        return tuple(MemorySummary.from_record(item) for item in records)
+
+    async def forget(
+        self,
+        context: RuntimeContext,
+        *,
+        user_message: str,
+        memory_id: str,
+    ) -> DeleteResult:
+        decision = self._policy.evaluate(
+            message=user_message,
+            kind="preference",
+            content=memory_id,
+        )
+        if not decision.allowed or decision.intent is not MemoryIntent.DELETE:
+            raise MemoryPolicyError(
+                decision.code or "MEMORY_EXPLICIT_INTENT_REQUIRED"
+            )
+        result = await self._store.delete(
+            customer_id=context.customer_id,
+            memory_id=memory_id,
+        )
+        await self._audit.record(
+            action="forget",
+            customer_id=context.customer_id,
+            memory_id=memory_id,
+            category=result.category,
+            result="deleted" if result.deleted else "not_found",
+        )
+        return result
+
+
+def _normalize_fact(content: str) -> str:
+    normalized = " ".join(content.split())
+    if not normalized:
+        raise MemoryPolicyError("MEMORY_POLICY_REJECTED")
+    return normalized
 
 
 class PolicyDecision(_MemoryModel):
