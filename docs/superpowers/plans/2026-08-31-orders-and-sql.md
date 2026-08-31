@@ -134,7 +134,7 @@ tests/integration/postgres/test_sql_readonly.py
 - Produces: `OperationPreview(operation_id, tool_name, normalized_args, args_hash, expected_version, status)`。
 - Produces: `preview_operation(...)` 与 `execute_approved(operation_id, decision)`。
 
-- [ ] **Step 1: 写参数篡改、重复批准和拒绝 RED**
+- [x] **Step 1: 写参数篡改、重复批准和拒绝 RED**
 
   ```python
   async def test_approval_rejects_changed_normalized_arguments():
@@ -146,19 +146,19 @@ tests/integration/postgres/test_sql_readonly.py
 
   重复批准返回首次 `result_artifact`，审计和领域写入计数保持一次；reject 后不能批准。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_operations.py -q`
 
-- [ ] **Step 3: 实现规范化哈希和 operation 状态机**
+- [x] **Step 3: 实现规范化哈希和 operation 状态机**
 
   `operation_id` 由 `IdGenerator` 创建；哈希输入为固定键顺序 JSON、工具名、客户、线程和 expected version。状态只允许 `pending -> approved/executed` 或 `pending -> rejected/expired`。
 
-- [ ] **Step 4: 运行 GREEN**
+- [x] **Step 4: 运行 GREEN**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_operations.py -q`
 
-- [ ] **Step 5: 提交审批与幂等核心**
+- [x] **Step 5: 提交审批与幂等核心**
 
   Commit: `feat: add immutable order operation approvals`
 
