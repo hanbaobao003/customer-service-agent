@@ -2,10 +2,9 @@
 
 from collections.abc import Iterator
 import os
-import socket
-from typing import NoReturn
 
 import pytest
+from pytest_socket import SocketBlockedError, disable_socket, enable_socket
 
 
 LIVE_OPT_INS = {
@@ -22,40 +21,38 @@ EXTERNAL_ACCESS_MARKERS = {
 }
 
 
-class ExternalAccessBlocked(RuntimeError):
-    """Raised when a default test attempts socket access."""
+ExternalAccessBlocked = SocketBlockedError
 
 
 class ExternalAccessGuard:
     """Block socket creation for deterministic unit and contract tests."""
 
-    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self._monkeypatch = monkeypatch
+    def __init__(self) -> None:
         self.active = False
 
     def enable(self) -> None:
-        self._monkeypatch.setattr(socket, "socket", self._blocked)
+        disable_socket(allow_unix_socket=True)
         self.active = True
-
-    @staticmethod
-    def _blocked(*args: object, **kwargs: object) -> NoReturn:
-        raise ExternalAccessBlocked("socket access is disabled for this test layer")
 
 
 @pytest.fixture(autouse=True)
 def external_access_guard(
     request: pytest.FixtureRequest,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[ExternalAccessGuard]:
     marker_names = {marker.name for marker in request.node.iter_markers()}
     for marker, env_name in LIVE_OPT_INS.items():
         if marker in marker_names:
             requires_opt_in(env_name)
 
-    guard = ExternalAccessGuard(monkeypatch)
+    guard = ExternalAccessGuard()
     if not marker_names.intersection(EXTERNAL_ACCESS_MARKERS):
         guard.enable()
-    yield guard
+    else:
+        enable_socket()
+    try:
+        yield guard
+    finally:
+        enable_socket()
 
 
 def requires_opt_in(env_name: str) -> None:

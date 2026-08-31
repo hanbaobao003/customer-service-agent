@@ -30,3 +30,10 @@
 - 附加探针：一次性未知 marker 收集命令退出码为 `2`，错误为 marker 未注册；探针随后删除，未进入项目测试集。
 - 未验证：Docker 服务、真实模型、Tavily、embedding/rerank 和 LangSmith；解除 socket 限制不提供任何凭证。
 - 提交：`test: enforce isolated verification layers`（本记录随该提交保存）。
+
+## M2 asyncio 回归修复
+
+- RED：`UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/quality/test_test_boundaries.py::test_unit_guard_allows_local_socketpair_for_asyncio -q`，退出码 1；`socket.socketpair()` 被错误拦截。
+- 根因：原守卫替换了全部 `socket.socket`，而 Python asyncio 事件循环依赖 `AF_UNIX` socketpair；网络隔离与本地进程内通信没有分开。
+- GREEN：改用项目已锁定的 `pytest-socket`，设置 `allow_unix_socket=True`；AF_INET/AF_INET6 仍被阻止。
+- 边界：该修复只允许 Unix domain socket，不解除默认外网和 Docker TCP 访问限制。

@@ -23,11 +23,25 @@ PLANNED_MARKERS = {
 def test_unit_test_cannot_open_network_socket(external_access_guard) -> None:
     opened_socket = None
     try:
-        with pytest.raises(ExternalAccessBlocked):
+        with (
+            pytest.warns(UserWarning, match="socket.socket"),
+            pytest.raises(ExternalAccessBlocked),
+        ):
             opened_socket = socket.socket()
     finally:
         if opened_socket is not None:
             opened_socket.close()
+
+
+@pytest.mark.unit
+def test_unit_guard_allows_local_socketpair_for_asyncio(external_access_guard) -> None:
+    first, second = socket.socketpair()
+    try:
+        assert first.family == socket.AF_UNIX
+        assert second.family == socket.AF_UNIX
+    finally:
+        first.close()
+        second.close()
 
 
 @pytest.mark.unit
