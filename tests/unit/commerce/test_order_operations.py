@@ -28,10 +28,10 @@ class Store:
     def __init__(self) -> None:
         self.operations: dict[str, OperationPreview] = {}
 
-    async def save(self, operation: OperationPreview) -> None:
+    async def save_operation(self, operation: OperationPreview) -> None:
         self.operations[operation.operation_id] = operation
 
-    async def get(
+    async def get_operation(
         self,
         operation_id: str,
         customer_id: str,
@@ -44,8 +44,18 @@ class Store:
             return None
         return operation
 
-    async def update(self, operation: OperationPreview) -> None:
+    async def update_operation(self, operation: OperationPreview) -> None:
         self.operations[operation.operation_id] = operation
+
+    async def execute_atomic(self, operation, executor):
+        result = await executor(operation, object())
+        self.operations[operation.operation_id] = operation.model_copy(
+            update={
+                "status": OperationStatus.EXECUTED,
+                "result_artifact": result,
+            }
+        )
+        return result
 
     def tamper(self, operation_id: str, normalized_args: dict[str, object]) -> None:
         operation = self.operations[operation_id]
@@ -63,10 +73,37 @@ class Executor:
         self.write_count = 0
         self.audit_count = 0
 
-    async def __call__(self, operation: OperationPreview) -> dict[str, object]:
+    async def __call__(
+        self,
+        operation: OperationPreview,
+        repository: object,
+    ) -> dict[str, object]:
         self.write_count += 1
         self.audit_count += 1
         return {"order_id": operation.normalized_args["order_id"], "ok": True}
+
+
+class AtomicStore(Store):
+    def __init__(self) -> None:
+        super().__init__()
+        self.atomic_execute_count = 0
+
+    async def execute_atomic(self, operation, executor):
+        self.atomic_execute_count += 1
+        result = await executor(operation, object())
+        executed = operation.model_copy(
+            update={
+                "status": OperationStatus.EXECUTED,
+                "result_artifact": result,
+            }
+        )
+        self.operations[operation.operation_id] = executed
+        return result
+
+    async def update_operation(self, operation: OperationPreview) -> None:
+        if operation.status is OperationStatus.EXECUTED:
+            raise AssertionError("approval must use the atomic execution port")
+        await super().update_operation(operation)
 
 
 def service(store: Store) -> OperationService:
@@ -93,6 +130,7 @@ async def test_preview_normalizes_arguments_and_binds_trusted_context() -> None:
     assert operation.operation_id == "operation-1"
     assert operation.customer_id == "customer-1"
     assert operation.thread_id == "thread-1"
+    assert operation.request_id == "request-1"
     assert operation.interrupt_id == "interrupt-1"
     assert operation.normalized_args == {
         "order_id": "order-1",
@@ -129,6 +167,7 @@ async def test_approval_rejects_changed_normalized_arguments() -> None:
     [
         {"tool_name": "update_order_contact"},
         {"interrupt_id": "interrupt-2"},
+        {"request_id": "request-2"},
         {"expected_version": 4},
     ],
 )
@@ -191,6 +230,27 @@ async def test_repeated_approval_returns_first_result_without_second_write() -> 
     assert executor.write_count == 1
     assert executor.audit_count == 1
     assert store.operations[operation.operation_id].status is OperationStatus.EXECUTED
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_approval_delegates_domain_write_and_result_to_atomic_store() -> None:
+    store = AtomicStore()
+    operation = await preview(store)
+
+    async def executor(operation: OperationPreview, repository: object):
+        assert repository is not None
+        return {"order_id": operation.normalized_args["order_id"], "ok": True}
+
+    result = await service(store).execute_approved(
+        context(),
+        operation_id=operation.operation_id,
+        decision="approve",
+        executor=executor,
+    )
+
+    assert result == {"order_id": "order-1", "ok": True}
+    assert store.atomic_execute_count == 1
 
 
 @pytest.mark.unit

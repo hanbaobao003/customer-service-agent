@@ -1,6 +1,6 @@
 # 订单与受控 SQL 规格
 
-**状态：** 实施中（Tasks 1–3 已完成）
+**状态：** 实施中（Tasks 1–4 已完成）
 
 **版本：** 1.0
 
@@ -25,6 +25,7 @@
 - `currency`、`total_amount`；
 - `created_at`、`updated_at`；
 - `version`：乐观并发版本。
+- `cancellation_refund_status`：取消时形成的退款处理状态；用于重复取消返回首次业务结果，不代表退款到账。
 
 `order_items`：`order_id`、`product_id`、`product_name_snapshot`、`unit_price`、`quantity`。
 
@@ -136,7 +137,7 @@ delivered -> return_requested -> returned -> refunded
 |---|---|
 | ORD-HITL-001 | 预览和待执行规范化参数必须保存并计算哈希；批准后必须验证哈希未变化。 |
 | ORD-HITL-002 | 只允许 approve/reject；任何参数修改都必须拒绝旧 operation 并生成新 operation。 |
-| ORD-HITL-003 | operation 必须绑定客户、线程、工具和 interrupt。 |
+| ORD-HITL-003 | operation 必须绑定客户、线程、请求、工具和 interrupt。 |
 | ORD-HITL-004 | 被拒绝、过期或客户不匹配的 operation 不得执行。 |
 
 ### 5.2 幂等

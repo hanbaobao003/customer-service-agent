@@ -174,7 +174,7 @@ tests/integration/postgres/test_sql_readonly.py
 - Produces: `create_order`、`update_order_contact`、`cancel_order`、`request_return` 预览。
 - Consumes: Task 3 的统一批准执行器。
 
-- [ ] **Step 1: 为四种写操作分别写最小 RED**
+- [x] **Step 1: 为四种写操作分别写最小 RED**
 
   核心断言：创建在批准前无订单；发货后不能修改；已付款取消只标记 `refund_status=pending`；只有 delivered 可创建唯一退货申请且只承诺“申请已提交”。
 
@@ -185,15 +185,15 @@ tests/integration/postgres/test_sql_readonly.py
       assert repo.orders == []
   ```
 
-- [ ] **Step 2: 运行四组 RED**
+- [x] **Step 2: 运行四组 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_commands.py -q`
 
-- [ ] **Step 3: 每次只实现当前测试所需的领域 handler**
+- [x] **Step 3: 每次只实现当前测试所需的领域 handler**
 
   handler 在批准执行时重新加载订单并比较 `expected_version`；版本不符返回 `ORDER_VERSION_CONFLICT`，要求重新预览，不自动合并。
 
-- [ ] **Step 4: 运行 GREEN 与 PostgreSQL 原子性集成**
+- [x] **Step 4: 运行 GREEN 与 PostgreSQL 原子性集成**
 
   Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_state_machine.py tests/unit/commerce/test_order_access.py tests/unit/commerce/test_order_operations.py tests/unit/commerce/test_order_commands.py -q`
 
@@ -201,7 +201,7 @@ tests/integration/postgres/test_sql_readonly.py
 
   集成测试故意在审计写入处注入事务失败，断言订单状态、operation 结果和审计全部回滚。
 
-- [ ] **Step 5: 提交完整订单生命周期**
+- [x] **Step 5: 提交完整订单生命周期**
 
   Commit: `feat: implement approved order operations`
 
