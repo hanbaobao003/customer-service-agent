@@ -43,7 +43,7 @@ tests/integration/postgres/test_sql_readonly.py
 - Produces: `OrderStatus`、`Order`、`OrderItem`、`ReturnRequest`。
 - Produces: `transition(order, target) -> Order`，非法转换抛出 `BusinessRuleRejected`。
 
-- [ ] **Step 1: 写允许/禁止转换 RED**
+- [x] **Step 1: 写允许/禁止转换 RED**
 
   ```python
   def test_shipped_order_cannot_be_cancelled():
@@ -56,13 +56,13 @@ tests/integration/postgres/test_sql_readonly.py
 
   参数化覆盖 `pending_payment -> paid -> processing -> shipped -> delivered`、发货前取消和 delivered 退货申请。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_state_machine.py -q`
 
   Expected: 转换矩阵尚未实现导致目标断言失败。
 
-- [ ] **Step 3: 实现不可变模型和转换矩阵**
+- [x] **Step 3: 实现不可变模型和转换矩阵**
 
   ```python
   ALLOWED_TRANSITIONS = {
@@ -76,11 +76,11 @@ tests/integration/postgres/test_sql_readonly.py
 
   每次成功转换版本加一；失败不修改原对象。
 
-- [ ] **Step 4: 运行 GREEN**
+- [x] **Step 4: 运行 GREEN**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/commerce/test_order_state_machine.py -q`
 
-- [ ] **Step 5: 提交状态机**
+- [x] **Step 5: 提交状态机**
 
   Commit: `feat: define explicit order lifecycle`
 
