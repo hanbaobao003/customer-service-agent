@@ -160,7 +160,7 @@ tests/integration/neo4j/
 - Produces: `RaptorNode(node_id, level, text, child_ids, source_ids, data_version)`。
 - Produces: `validate_tree(nodes)` 与 `descend_hits(root_hits, node_store)`。
 
-- [ ] **Step 1: 写孤立摘要与下钻路径 RED**
+- [x] **Step 1: 写孤立摘要与下钻路径 RED**
 
   ```python
   def test_summary_node_without_children_is_rejected():
@@ -170,11 +170,11 @@ tests/integration/neo4j/
 
   查询测试断言 artifact 同时包含命中层级、每次下钻 node ID 和最终叶子 source ID。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_raptor.py -q`
 
-- [ ] **Step 3: 实现确定性 ID、完整性检查和下钻**
+- [x] **Step 3: 实现确定性 ID、完整性检查和下钻**
 
   节点 ID 由 `data_version + level + sorted(child_ids) + content_hash` 计算；摘要模型只通过 `SummarizerPort` 注入。DG-005 未批准时只用 deterministic fake 验证树算法，不发布真实树。
 
@@ -184,7 +184,9 @@ tests/integration/neo4j/
 
   Integration: `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_raptor.py -q`
 
-- [ ] **Step 5: 提交 RAPTOR 切片**
+  当前单元部分已通过；DG-005 未批准，因此未创建或运行真实 RAPTOR 索引与 Milvus 集成。
+
+- [x] **Step 5: 提交 RAPTOR 纯函数切片**
 
   Commit: `feat: add traceable RAPTOR tree retrieval`
 
