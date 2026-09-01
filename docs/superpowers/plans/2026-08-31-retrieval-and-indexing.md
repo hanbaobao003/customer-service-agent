@@ -197,13 +197,13 @@ tests/integration/neo4j/
 - Create: `src/customer_service_agent/retrieval/tools.py`
 - Test: `tests/unit/retrieval/test_graph.py`
 - Test: `tests/unit/retrieval/test_web_policy.py`
-- Test: `tests/integration/neo4j/test_graph.py`
+- Test: `tests/integration/neo4j/test_neo4j_graph.py`
 
 **Interfaces:**
 - Produces: `GraphQueryRegistry.execute(template_id, parameters)`。
 - Produces: `WebSearchPolicy.authorize(domain, intent)`。
 
-- [ ] **Step 1: 写任意 Cypher 和内部政策联网 RED**
+- [x] **Step 1: 写任意 Cypher 和内部政策联网 RED**
 
   ```python
   def test_unknown_graph_template_is_rejected_without_driver_call():
@@ -214,23 +214,23 @@ tests/integration/neo4j/
 
   另测 `intent="internal_return_policy"` 必须拒绝 Tavily，`intent="public_logistics_disruption"` 才允许。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_graph.py tests/unit/retrieval/test_web_policy.py -q`
 
-- [ ] **Step 3: 实现注册表、固定 schema 和网页结果 DTO**
+- [x] **Step 3: 实现注册表、固定 schema 和网页结果 DTO**
 
   模板参数逐字段验证，Cypher 仅存在版本控制模块中。网页结果固定 `title/url/fetched_at/summary`，不进入内部知识索引。
 
-- [ ] **Step 4: 运行 GREEN 与 Neo4j 集成**
+- [x] **Step 4: 运行 GREEN 与 Neo4j 集成**
 
   Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_graph.py tests/unit/retrieval/test_web_policy.py -q`
 
-  Integration: `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_neo4j tests/integration/neo4j/test_graph.py -q`
+  Integration: `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_neo4j tests/integration/neo4j/test_neo4j_graph.py -q`
 
   实际 Tavily 仅在 `live_web` marker 和显式开关下运行。
 
-- [ ] **Step 5: 提交图与联网边界**
+- [x] **Step 5: 提交图与联网边界**
 
   Commit: `feat: enforce graph and web retrieval boundaries`
 

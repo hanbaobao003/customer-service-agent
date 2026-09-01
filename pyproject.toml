@@ -8,6 +8,7 @@ dependencies = [
     "langchain==1.3.18",
     "langgraph==1.2.11",
     "mem0ai==2.0.19",
+    "neo4j-graphrag==1.19.0",
     "psycopg[binary,pool]>=3.2,<4",
     "sqlglot>=27,<30",
 ]
