@@ -10,6 +10,12 @@ import uuid
 import pytest
 from pytest_socket import SocketBlockedError, disable_socket, enable_socket
 
+from customer_service_agent.retrieval.indexing import (
+    MilvusRunResources,
+    make_milvus_run_resources,
+    validate_milvus_owned_database,
+)
+
 
 LIVE_OPT_INS = {
     "live_model": "RUN_LIVE_MODEL_TESTS",
@@ -86,6 +92,42 @@ def requires_opt_in(env_name: str) -> None:
 
     if os.getenv(env_name) != "1":
         pytest.skip(f"set {env_name}=1 to run this live test")
+
+
+@pytest.fixture
+def milvus_resources() -> MilvusRunResources:
+    return make_milvus_run_resources(uuid.uuid4().hex[:12])
+
+
+@pytest.fixture
+def milvus_admin_client() -> Iterator[object]:
+    if os.environ.get("RUN_MILVUS_INTEGRATION") != "1":
+        pytest.skip("set RUN_MILVUS_INTEGRATION=1 to use Docker Milvus")
+    from pymilvus import MilvusClient
+
+    client = MilvusClient(
+        uri=os.environ.get("MILVUS_URI", "http://127.0.0.1:19530"),
+        token=os.environ.get("MILVUS_TOKEN", ""),
+        timeout=10,
+    )
+    yield client
+
+
+@pytest.fixture
+def isolated_milvus_database(
+    milvus_admin_client: object,
+    milvus_resources: MilvusRunResources,
+) -> Iterator[MilvusRunResources]:
+    milvus_admin_client.create_database(milvus_resources.database_name)
+    try:
+        yield milvus_resources
+    finally:
+        validate_milvus_owned_database(
+            milvus_resources.database_name,
+            milvus_resources.run_id,
+        )
+        milvus_admin_client.drop_database(milvus_resources.database_name)
+        assert milvus_resources.database_name not in milvus_admin_client.list_databases()
 
 
 def _postgres_resource_name(kind: str, run_id: str) -> str:

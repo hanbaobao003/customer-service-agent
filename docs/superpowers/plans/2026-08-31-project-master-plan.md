@@ -46,8 +46,8 @@
 | DG-001 运行时与框架确切版本 | M1 创建 `pyproject.toml` 前 | 依赖锁定和所有 SDK 实现 | 文档与环境只读盘点 |
 | DG-002 DeepSeek 模型 ID | M5 创建真实模型工厂前 | 真实 Agent、摘要和 NL2SQL 模型调用 | scripted model 单元与契约测试 |
 | DG-003 embedding 维度与 reranker（已批准：BGE-M3 1024 维、bge-reranker-v2-m3） | M3/M4 创建真实向量 schema 前 | 已关闭；真实外部调用仍需 live opt-in | 纯函数、端口和确定性测试替身 |
-| DG-004 检索参数 | M4 发布混合索引前 | 默认检索配置与发布 | 参数化算法测试和基线报告 |
-| DG-005 RAPTOR 参数 | M4 发布 RAPTOR 索引前 | 真实摘要树发布 | 确定性树构建与完整性测试 |
+| DG-004 检索参数（已批准，见 `docs/decisions/002-m4-retrieval-parameters.md`） | M4 发布混合索引前 | 默认检索配置与发布 | 参数化算法测试和基线报告 |
+| DG-005 RAPTOR 参数（已批准，见 `docs/decisions/002-m4-retrieval-parameters.md`） | M4 发布 RAPTOR 索引前 | 真实摘要树发布 | 确定性树构建与完整性测试 |
 | DG-006 数据服务连接与资源 | M0 兼容性检查后、首次集成测试前 | 对应 Docker 集成测试 | 单元和契约测试 |
 | DG-007 LangSmith 裁判与预算 | M6 运行 LLM 裁判前 | LLM 裁判实验 | 确定性评分与本地评测门禁 |
 | DG-008 新账号、付费服务或外部数据 | 首次需要前 | 对应真实服务验证 | 不依赖该资源的全部工作 |

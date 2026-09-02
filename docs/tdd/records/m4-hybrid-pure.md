@@ -21,7 +21,8 @@
 
 ## 决策门与未验证边界
 
+- 本记录的原始纯函数切片完成时 DG-004 尚未批准；截至 2026-09-02，DG-004 已批准，具体值见 `docs/decisions/002-m4-retrieval-parameters.md`。
 - 本实现没有默认权重、top-k、collection、chunk 或 rerank 数量；测试中的值均为显式算法样例，不是部署默认值。
-- `weighted_reciprocal_rank` 当前是显式实验方法，不代表 DG-004 已批准其权重或发布配置。
+- `weighted_reciprocal_rank` 当前是显式实验方法；获批默认权重和发布配置尚待后续 Milvus TDD 切片实现。
 - 尚未安装或调用 PyMilvus，没有创建 Milvus schema/collection，没有运行 BGE-M3、BM25、reranker 或 small-to-big 集成测试。
-- 真实 adapter 暂未创建，因此未批准配置不可能绕过门禁启动；DG-004 批准后再通过真实 adapter 构造测试固定 `CONFIG_NOT_APPROVED` 行为。
+- 真实 adapter 暂未创建；后续实现必须通过隔离 Milvus L3 测试，不能将纯函数 GREEN 视为真实后端验证。

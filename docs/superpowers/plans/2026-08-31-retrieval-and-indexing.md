@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- DG-003 已批准 BGE-M3 1024 维和 `BAAI/bge-reranker-v2-m3`。DG-004、DG-005 未批准时，不创建或发布真实 Milvus schema、检索默认参数或 RAPTOR 索引。
+- DG-003 已批准 BGE-M3 1024 维和 `BAAI/bge-reranker-v2-m3`。DG-004、DG-005 已于 2026-09-02 批准；其具体参数、TDD 实施顺序和 Milvus L3 资源名以 `2026-09-02-m4-milvus-raptor-indexing.md` 为准。
 - 在线工具只读；构建和发布只能由离线 CLI 触发。
 - 每个知识结论必须绑定实际 artifact 中存在的 citation。
 - GraphRAG 只允许白名单模板，禁止执行模型生成 Cypher。
@@ -120,7 +120,7 @@ tests/integration/neo4j/
 
   Expected: 融合/父块展开行为缺失导致断言失败。
 
-- [x] **Step 3: 实现纯函数，不选择未批准参数**
+- [x] **Step 3: 实现纯函数，不预设部署参数**
 
   ```python
   @dataclass(frozen=True)
@@ -131,11 +131,11 @@ tests/integration/neo4j/
       final_k: int
   ```
 
-  所有参数必须由调用者显式传入；DG-004 未批准时构建真实 adapter 返回 `CONFIG_NOT_APPROVED`，纯函数单元测试继续运行。
+  所有参数必须由调用者显式传入；获批默认参数与 Milvus adapter 的实现见补充计划，纯函数单元测试继续运行。
 
-- [ ] **Step 4: 运行 GREEN；批准参数后执行 Milvus 集成 RED→GREEN**
+- [ ] **Step 4: 运行 GREEN；按补充计划执行 Milvus 集成 RED→GREEN**
 
-  单元 GREEN 已完成；Milvus schema、真实 adapter 与集成测试等待 DG-004，不计为完成。
+  单元 GREEN 已完成；Milvus schema、真实 adapter 与集成测试按补充计划执行，不计为完成。
 
   Unit: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_hybrid.py -q`
 
@@ -176,7 +176,7 @@ tests/integration/neo4j/
 
 - [x] **Step 3: 实现确定性 ID、完整性检查和下钻**
 
-  节点 ID 由 `data_version + level + sorted(child_ids) + content_hash` 计算；摘要模型只通过 `SummarizerPort` 注入。DG-005 未批准时只用 deterministic fake 验证树算法，不发布真实树。
+  节点 ID 由 `data_version + level + sorted(child_ids) + content_hash` 计算；摘要模型只通过 `SummarizerPort` 注入。真实树和模型适配按补充计划推进，纯函数仍只使用 deterministic fake。
 
 - [ ] **Step 4: 运行 GREEN；获批后运行 Milvus RAPTOR 集成**
 
@@ -184,7 +184,7 @@ tests/integration/neo4j/
 
   Integration: `UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_raptor.py -q`
 
-  当前单元部分已通过；DG-005 未批准，因此未创建或运行真实 RAPTOR 索引与 Milvus 集成。
+  当前单元部分已通过；尚未创建或运行真实 RAPTOR 索引与 Milvus 集成，执行顺序见补充计划。
 
 - [x] **Step 5: 提交 RAPTOR 纯函数切片**
 

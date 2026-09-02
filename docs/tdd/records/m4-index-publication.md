@@ -23,5 +23,5 @@
 ## 未验证边界
 
 - 当前 builder、validator、publisher 均为端口；未创建 Milvus database/collection、候选索引、版本别名或真实发布。
-- DG-004、DG-005 未批准，故不能配置或发布常规 RAG、RAPTOR 的真实检索参数和索引。
+- 本记录对应的初始切片完成时 DG-004、DG-005 未批准；截至 2026-09-02，两者已批准，具体值见 `docs/decisions/002-m4-retrieval-parameters.md`。真实索引仍未创建或发布。
 - Tavily live、Milvus L3 与真实工具 service 装配仍需相应 explicit opt-in/决策门。

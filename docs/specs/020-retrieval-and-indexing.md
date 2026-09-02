@@ -1,6 +1,6 @@
 # 检索与索引规格
 
-**状态：** 已批准设计，实施中（M4 Task 2–3 纯函数、Task 4 图与联网边界、Task 5 离线发布状态机已完成；Milvus 集成分别受 DG-004、DG-005 阻塞）
+**状态：** 已批准设计，实施中（M4 Task 2–3 纯函数、Task 4 图与联网边界、Task 5 离线发布状态机已完成；DG-004、DG-005 已于 2026-09-02 批准，等待细化 TDD 计划审阅后进入 Milvus 集成）
 
 **版本：** 1.1
 
@@ -95,7 +95,7 @@ Milvus collection 必须同时支持 BGE-M3 稠密表示与 BM25/稀疏表示。
 | RET-HYB-001 | `search_product_faq` 只能检索商品与 FAQ collection。 |
 | RET-HYB-002 | 稠密与 BM25 两路结果必须在 artifact 中可区分，融合过程必须可复现。 |
 | RET-HYB-003 | 最终模型证据必须使用 parent 文本，引用必须能定位到命中的 child 与展开的 parent。 |
-| RET-HYB-004 | DG-003 已批准 BGE-M3 1024 维和 `BAAI/bge-reranker-v2-m3`；DG-004 未批准前只允许显式参数的纯函数与实验，不得发布默认 Milvus schema 或检索配置。 |
+| RET-HYB-004 | DG-003 已批准 BGE-M3 1024 维和 `BAAI/bge-reranker-v2-m3`；DG-004 已批准，具体值记录在 `docs/decisions/002-m4-retrieval-parameters.md`。真实 schema、发布和 L3 测试仍须遵循 TDD 计划与安全资源隔离。 |
 
 ## 4. RAPTOR
 
@@ -107,7 +107,7 @@ Milvus collection 必须同时支持 BGE-M3 稠密表示与 BM25/稀疏表示。
 - level 1..N：聚类摘要节点；
 - 每个节点包含 `node_id`、`document_id`、`level`、`child_ids`、摘要或原文、embedding、数据版本和生成元数据。
 
-`N`、聚类算法参数和摘要模型由 DG-005 批准。离线构建必须使用固定输入版本，记录模型 ID、温度、prompt version 和随机种子（若算法支持）。
+`N`、聚类算法参数和摘要模型已由 DG-005 批准，具体值记录在 `docs/decisions/002-m4-retrieval-parameters.md`。离线构建必须使用固定输入版本，记录模型 ID、温度、prompt version 和随机种子（若算法支持）。
 
 ### 4.2 查询流程
 
@@ -122,7 +122,7 @@ Milvus collection 必须同时支持 BGE-M3 稠密表示与 BM25/稀疏表示。
 | RET-RAP-001 | `search_policy_raptor` 只能检索政策与手册树。 |
 | RET-RAP-002 | 每个摘要节点必须保存完整子节点引用，不允许无法追溯的孤立摘要。 |
 | RET-RAP-003 | 查询 artifact 必须显示命中层级、下钻路径和最终叶子证据。 |
-| RET-RAP-004 | 未获 DG-005 批准前不得发布 RAPTOR 索引；获批前探针产物必须标记为实验结果。 |
+| RET-RAP-004 | DG-005 已批准；发布 RAPTOR 索引前仍必须通过隔离 Milvus L3 测试。真实摘要模型调用保持显式 live-model opt-in。 |
 
 ## 5. GraphRAG
 

@@ -1,11 +1,48 @@
 """Offline index build, validation, and publication contracts."""
 
+import re
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
 
 class IndexBuildFailed(RuntimeError):
     pass
+
+
+_MILVUS_RUN_ID_RE = re.compile(r"[0-9a-f]{12}")
+_MILVUS_DATABASE_RE = re.compile(r"wang_agent_it_[0-9a-f]{12}")
+
+
+@dataclass(frozen=True)
+class MilvusRunResources:
+    run_id: str
+    database_name: str
+    hybrid_collection: str
+    raptor_collection: str
+    hybrid_alias: str
+    raptor_alias: str
+
+
+def make_milvus_run_resources(run_id: str) -> MilvusRunResources:
+    if _MILVUS_RUN_ID_RE.fullmatch(run_id) is None:
+        raise ValueError("run_id must be 12 lowercase hex characters")
+    return MilvusRunResources(
+        run_id=run_id,
+        database_name=f"wang_agent_it_{run_id}",
+        hybrid_collection=f"hybrid_candidate_{run_id}",
+        raptor_collection=f"raptor_candidate_{run_id}",
+        hybrid_alias=f"hybrid_current_{run_id}",
+        raptor_alias=f"raptor_current_{run_id}",
+    )
+
+
+def validate_milvus_owned_database(name: str, run_id: str) -> None:
+    resources = make_milvus_run_resources(run_id)
+    if (
+        _MILVUS_DATABASE_RE.fullmatch(name) is None
+        or name != resources.database_name
+    ):
+        raise ValueError("owned database does not match this test run")
 
 
 @dataclass(frozen=True)
