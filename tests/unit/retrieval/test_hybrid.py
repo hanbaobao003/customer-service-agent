@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import pytest
 
+from customer_service_agent.retrieval import hybrid
 from customer_service_agent.retrieval.hybrid import (
     FusionConfig,
     HybridConfigError,
@@ -114,6 +115,23 @@ def test_invalid_fusion_config_is_rejected(changes: dict[str, object]) -> None:
 
     with pytest.raises(HybridConfigError):
         FusionConfig(**values)
+
+
+@pytest.mark.unit
+def test_hybrid_document_rejects_vector_not_bge_m3_dimension() -> None:
+    with pytest.raises(HybridConfigError, match="1024"):
+        hybrid.HybridIndexDocument(
+            child_id="child-1",
+            parent_id="parent-1",
+            source_id="faq-1",
+            title="配送",
+            child_text="满 99 元包邮",
+            parent_text="配送政策",
+            child_locator="c1",
+            parent_locator="p1",
+            data_version="faq-v1",
+            dense_vector=(0.0,) * 1023,
+        )
 
 
 @pytest.mark.unit

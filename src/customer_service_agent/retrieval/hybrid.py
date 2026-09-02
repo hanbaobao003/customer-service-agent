@@ -1,9 +1,11 @@
 """Hybrid retrieval and small-to-big expansion."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
+
+from pymilvus import DataType, Function, FunctionType
 
 from customer_service_agent.retrieval.models import RetrievalArtifact, RetrievalHit
 
@@ -83,6 +85,38 @@ class ParentDocument:
 
 
 @dataclass(frozen=True)
+class HybridIndexDocument:
+    child_id: str
+    parent_id: str
+    source_id: str
+    title: str
+    child_text: str
+    parent_text: str
+    child_locator: str
+    parent_locator: str
+    data_version: str
+    dense_vector: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        if len(self.dense_vector) != 1024:
+            raise HybridConfigError("dense vector must have 1024 dimensions")
+        if not all(
+            (
+                self.child_id,
+                self.parent_id,
+                self.source_id,
+                self.title,
+                self.child_text,
+                self.parent_text,
+                self.child_locator,
+                self.parent_locator,
+                self.data_version,
+            )
+        ):
+            raise HybridConfigError("hybrid index document fields must not be empty")
+
+
+@dataclass(frozen=True)
 class HybridLocator:
     child_id: str
     child_locator: str
@@ -106,6 +140,210 @@ class HybridSearchPort(Protocol):
 
 class ParentStorePort(Protocol):
     def get(self, parent_id: str) -> ParentDocument | None: ...
+
+
+def create_hybrid_collection(client: object, collection_name: str) -> None:
+    schema = client.create_schema(auto_id=False, enable_dynamic_field=False)
+    schema.add_field(
+        field_name="child_id",
+        datatype=DataType.VARCHAR,
+        is_primary=True,
+        max_length=256,
+    )
+    for field_name in (
+        "parent_id",
+        "source_id",
+        "title",
+        "child_locator",
+        "parent_locator",
+        "data_version",
+    ):
+        schema.add_field(field_name=field_name, datatype=DataType.VARCHAR, max_length=256)
+    schema.add_field(
+        field_name="child_text",
+        datatype=DataType.VARCHAR,
+        max_length=65535,
+        enable_analyzer=True,
+        analyzer_params={"type": "chinese"},
+    )
+    schema.add_field(
+        field_name="parent_text",
+        datatype=DataType.VARCHAR,
+        max_length=65535,
+    )
+    schema.add_field(
+        field_name="dense_vector",
+        datatype=DataType.FLOAT_VECTOR,
+        dim=1024,
+    )
+    schema.add_field(
+        field_name="sparse_vector",
+        datatype=DataType.SPARSE_FLOAT_VECTOR,
+    )
+    schema.add_function(
+        Function(
+            name="bm25",
+            function_type=FunctionType.BM25,
+            input_field_names=["child_text"],
+            output_field_names=["sparse_vector"],
+        )
+    )
+    index_params = client.prepare_index_params()
+    index_params.add_index(
+        field_name="dense_vector",
+        index_type="AUTOINDEX",
+        metric_type="COSINE",
+    )
+    index_params.add_index(
+        field_name="sparse_vector",
+        index_type="SPARSE_INVERTED_INDEX",
+        metric_type="BM25",
+    )
+    client.create_collection(
+        collection_name=collection_name,
+        schema=schema,
+        index_params=index_params,
+    )
+
+
+class MilvusHybridIndex:
+    def __init__(
+        self,
+        *,
+        client: object,
+        collection_name: str,
+        data_version: str,
+        embed_query: Callable[[str], Sequence[float]],
+    ) -> None:
+        if not collection_name or not data_version:
+            raise HybridConfigError("collection name and data version must not be empty")
+        self._client = client
+        self._collection_name = collection_name
+        self._data_version = data_version
+        self._embed_query = embed_query
+
+    def insert(self, documents: Sequence[HybridIndexDocument]) -> None:
+        self._client.insert(
+            collection_name=self._collection_name,
+            data=[
+                {
+                    "child_id": item.child_id,
+                    "parent_id": item.parent_id,
+                    "source_id": item.source_id,
+                    "title": item.title,
+                    "child_text": item.child_text,
+                    "parent_text": item.parent_text,
+                    "child_locator": item.child_locator,
+                    "parent_locator": item.parent_locator,
+                    "data_version": item.data_version,
+                    "dense_vector": list(item.dense_vector),
+                }
+                for item in documents
+            ],
+        )
+        self._client.flush(self._collection_name)
+
+    async def search_dense(self, query: str, *, limit: int) -> Sequence[SearchHit]:
+        return self._search(
+            anns_field="dense_vector",
+            data=[list(self._embed_query(query))],
+            limit=limit,
+            search_params={"metric_type": "COSINE", "params": {}},
+        )
+
+    async def search_sparse(self, query: str, *, limit: int) -> Sequence[SearchHit]:
+        return self._search(
+            anns_field="sparse_vector",
+            data=[query],
+            limit=limit,
+            search_params={"metric_type": "BM25", "params": {}},
+        )
+
+    def get(self, parent_id: str) -> ParentDocument | None:
+        rows = self._client.query(
+            collection_name=self._collection_name,
+            filter=(
+                f'parent_id == {_milvus_string(parent_id)} and '
+                f'data_version == {_milvus_string(self._data_version)}'
+            ),
+            output_fields=[
+                "parent_id",
+                "source_id",
+                "title",
+                "parent_text",
+                "parent_locator",
+            ],
+        )
+        if not rows:
+            return None
+        first = rows[0]
+        required = ("source_id", "title", "parent_text", "parent_locator")
+        if any(first.get(field) is None for field in required):
+            raise HybridIntegrityError("parent document is incomplete")
+        parent = ParentDocument(
+            parent_id=parent_id,
+            source_id=str(first["source_id"]),
+            title=str(first["title"]),
+            text=str(first["parent_text"]),
+            locator=str(first["parent_locator"]),
+        )
+        if any(
+            (
+                str(row.get("source_id")) != parent.source_id
+                or str(row.get("title")) != parent.title
+                or str(row.get("parent_text")) != parent.text
+                or str(row.get("parent_locator")) != parent.locator
+            )
+            for row in rows[1:]
+        ):
+            raise HybridIntegrityError(f"conflicting parent: {parent_id}")
+        return parent
+
+    def _search(
+        self,
+        *,
+        anns_field: str,
+        data: list[object],
+        limit: int,
+        search_params: dict[str, object],
+    ) -> list[SearchHit]:
+        if limit < 1:
+            raise HybridConfigError("search limit must be positive")
+        result = self._client.search(
+            collection_name=self._collection_name,
+            data=data,
+            anns_field=anns_field,
+            filter=f'data_version == {_milvus_string(self._data_version)}',
+            limit=limit,
+            output_fields=[
+                "child_id",
+                "parent_id",
+                "source_id",
+                "child_text",
+                "child_locator",
+                "data_version",
+            ],
+            search_params=search_params,
+        )
+        return [_search_hit(item) for item in result[0]]
+
+
+def _search_hit(item: Mapping[str, object]) -> SearchHit:
+    entity = item.get("entity")
+    row = entity if isinstance(entity, Mapping) else item
+    return SearchHit(
+        child_id=str(row["child_id"]),
+        parent_id=str(row["parent_id"]),
+        source_id=str(row["source_id"]),
+        score=Decimal(str(item["distance"])),
+        raw_text=str(row["child_text"]),
+        locator=str(row["child_locator"]),
+        metadata={"data_version": row["data_version"]},
+    )
+
+
+def _milvus_string(value: str) -> str:
+    return f'"{value.replace("\\", "\\\\").replace('"', '\\"')}"'
 
 
 def fuse_hits(

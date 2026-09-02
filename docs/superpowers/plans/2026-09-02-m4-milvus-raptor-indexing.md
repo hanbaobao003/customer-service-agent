@@ -14,7 +14,7 @@
 
 - DG-004：token chunk 500、overlap 100、候选 top-k 20、dense/BM25 权重 0.5/0.5、rerank 3。
 - DG-005：L0 叶节点与 L1–L3 三层摘要、余弦确定性层次聚类、seed 42、每父节点目标 8 子节点（尾组为避免单子节点摘要可为 9）、deepseek-v4-flash、temperature 0、上限 300 tokens、raptor-summary-v1。
-- BGE-M3 维度固定 1024；Milvus 使用 TEXT + 内置 BM25 产生 sparse field，dense field 使用 COSINE。
+- BGE-M3 维度固定 1024；Milvus 使用启用 `chinese` analyzer 的 `VARCHAR` + 内置 BM25 产生 sparse field，dense field 使用 COSINE。当前 Docker Milvus 未启用 StorageV3，不能使用 `TEXT`；这不改变官方 BM25 对 `VARCHAR` 的支持。
 - 真实 embedding/rerank 必须标记 live_embedding；真实 DeepSeek 摘要必须标记 live_model。两者默认不执行。
 - 不读取、打印或提交 .env 值；运行期仅使用环境变量名称。
 - 不删除已有 Milvus 数据库或 collection；所有删除都在严格验证本次 run 名称之后执行。
@@ -92,7 +92,7 @@ Create: docs/tdd/records/m4-milvus-integration.md
 
 **Files:**
 - Modify: src/customer_service_agent/retrieval/hybrid.py
-- Create: tests/integration/milvus/test_hybrid.py
+- Create: tests/integration/milvus/test_milvus_hybrid.py
 - Modify: tests/unit/retrieval/test_hybrid.py
 
 **Interfaces:**
@@ -101,7 +101,7 @@ Create: docs/tdd/records/m4-milvus-integration.md
 - Produces: create_hybrid_collection(client, collection_name) -> None。
 - Consumes: FusionConfig(method="weighted_reciprocal_rank", dense_weight=Decimal("0.5"), sparse_weight=Decimal("0.5"), candidate_k=20, final_k=3)。
 
-- [ ] **Step 1: 写 schema 参数与映射失败测试**
+- [x] **Step 1: 写 schema 参数与映射失败测试**
 
     def test_hybrid_document_rejects_vector_not_bge_m3_dimension() -> None:
         with pytest.raises(HybridConfigError, match="1024"):
@@ -114,15 +114,15 @@ Create: docs/tdd/records/m4-milvus-integration.md
 
 集成测试先以固定 1024 维单位向量写两条语料，查询向量同为第一维 1.0；断言 dense 与 BM25 均仅返回 data_version="faq-v1" 的 child，expand_parents() 返回完整 parent text 和原 child locator。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
 Run: UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_hybrid.py -q
 
 Expected: FAIL，因为 HybridIndexDocument 与实际 adapter 尚未实现。
 
-- [ ] **Step 3: 实现最小 adapter**
+- [x] **Step 3: 实现最小 adapter**
 
-使用 custom schema，禁止 dynamic field：child_id 主键、parent_id/source_id/title/child_locator/parent_locator/data_version 为标量、child_text 为启用 analyzer 的 TEXT、dense_vector 为 1024 维 FLOAT_VECTOR、sparse_vector 为 BM25 函数输出。建立 dense_vector/COSINE 与 sparse_vector/BM25 索引。
+使用 custom schema，禁止 dynamic field：child_id 主键、parent_id/source_id/title/child_locator/parent_locator/data_version 为标量、child_text 为启用 `chinese` analyzer 的 `VARCHAR`、dense_vector 为 1024 维 FLOAT_VECTOR、sparse_vector 为 BM25 函数输出。建立 dense_vector/COSINE 与 sparse_vector/BM25 索引。
 
     async def search_dense(self, query: str, *, limit: int) -> Sequence[SearchHit]:
         return self._search(field="dense_vector", data=[self._embed_query(query)], limit=limit)
@@ -132,16 +132,16 @@ Expected: FAIL，因为 HybridIndexDocument 与实际 adapter 尚未实现。
 
 两路搜索都强制表达式 data_version == 当前版本，只返回统一 SearchHit。get(parent_id) 验证只有一个同版本 parent 文本。真实 BGE embedding 与 reranker 保持在独立 live adapter，默认测试只接受测试注入的 1024 维向量。
 
-- [ ] **Step 4: 运行 GREEN 与 L3 检索验证**
+- [x] **Step 4: 运行 GREEN 与 L3 检索验证**
 
-Run: RUN_MILVUS_INTEGRATION=1 UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_hybrid.py -q
+Run: RUN_MILVUS_INTEGRATION=1 UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_milvus_hybrid.py -q
 
 Expected: PASS；固定向量、Milvus 内置 BM25、版本过滤、small-to-big 和 artifact 的 dense/sparse/fused 命中均可观察。
 
-- [ ] **Step 5: 记录 TDD 证据并提交**
+- [x] **Step 5: 记录 TDD 证据并提交**
 
     git add pyproject.toml uv.lock src/customer_service_agent/retrieval/hybrid.py \
-      tests/unit/retrieval/test_hybrid.py tests/integration/milvus/test_hybrid.py \
+      tests/unit/retrieval/test_hybrid.py tests/integration/milvus/test_milvus_hybrid.py \
       docs/tdd/records/m4-hybrid-pure.md docs/tdd/records/m4-milvus-integration.md
     git commit -m "feat: add Milvus hybrid retrieval adapter"
 

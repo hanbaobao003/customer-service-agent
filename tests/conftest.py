@@ -126,8 +126,40 @@ def isolated_milvus_database(
             milvus_resources.database_name,
             milvus_resources.run_id,
         )
+        from pymilvus import MilvusClient
+
+        database_client = MilvusClient(
+            uri=os.environ.get("MILVUS_URI", "http://127.0.0.1:19530"),
+            token=os.environ.get("MILVUS_TOKEN", ""),
+            db_name=milvus_resources.database_name,
+            timeout=10,
+        )
+        collections = set(database_client.list_collections())
+        allowed = {
+            milvus_resources.hybrid_collection,
+            milvus_resources.raptor_collection,
+        }
+        unexpected = collections - allowed
+        if unexpected:
+            raise AssertionError(f"unexpected Milvus test collections: {sorted(unexpected)}")
+        for collection_name in collections:
+            database_client.drop_collection(collection_name)
         milvus_admin_client.drop_database(milvus_resources.database_name)
         assert milvus_resources.database_name not in milvus_admin_client.list_databases()
+
+
+@pytest.fixture
+def milvus_database_client(
+    isolated_milvus_database: MilvusRunResources,
+) -> object:
+    from pymilvus import MilvusClient
+
+    return MilvusClient(
+        uri=os.environ.get("MILVUS_URI", "http://127.0.0.1:19530"),
+        token=os.environ.get("MILVUS_TOKEN", ""),
+        db_name=isolated_milvus_database.database_name,
+        timeout=10,
+    )
 
 
 def _postgres_resource_name(kind: str, run_id: str) -> str:
