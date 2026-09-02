@@ -10,6 +10,7 @@ from langgraph.types import Command
 
 from customer_service_agent.agent_api import middleware
 from customer_service_agent.agent_api import service
+from customer_service_agent.shared.models import RuntimeContext
 
 
 class ToolAwareFakeMessagesListChatModel(FakeMessagesListChatModel):
@@ -51,6 +52,25 @@ async def test_async_middleware_awaits_handler_and_returns_result() -> None:
     assert isinstance(result, Command)
     assert result.update["messages"][0].content == "ok"
     assert result.update["governance_tool_calls"] == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_runtime_authorization_blocks_tool_without_trusted_context() -> None:
+    called = False
+
+    async def handler(_request: ToolCallRequest) -> ToolMessage:
+        nonlocal called
+        called = True
+        return ToolMessage(content="ok", tool_call_id="call-1")
+
+    with pytest.raises(middleware.TrustedContextMissing):
+        await middleware.RuntimeAuthorizationMiddleware().awrap_tool_call(
+            request("web_search"),
+            handler,
+        )
+
+    assert called is False
 
 
 @pytest.mark.unit
@@ -149,6 +169,11 @@ async def test_model_budget_blocks_second_agent_model_call() -> None:
         await agent.ainvoke(
             {"messages": [HumanMessage(content="查询")]},
             config={"configurable": {"thread_id": "model-limit"}},
+            context=RuntimeContext.trusted(
+                customer_id="customer-a",
+                thread_id="model-limit",
+                request_id="request-model-limit",
+            ),
         )
 
 
@@ -247,6 +272,11 @@ async def test_tool_budget_blocks_second_agent_tool_call() -> None:
         await agent.ainvoke(
             {"messages": [HumanMessage(content="查询")]},
             config={"configurable": {"thread_id": "tool-limit"}},
+            context=RuntimeContext.trusted(
+                customer_id="customer-a",
+                thread_id="tool-limit",
+                request_id="request-tool-limit",
+            ),
         )
 
 
@@ -357,8 +387,10 @@ def test_agent_middleware_requires_approval_for_exactly_write_tools() -> None:
         max_read_retries=1,
     )
 
-    hitl = chain[1]
+    hitl = chain[2]
 
+    assert isinstance(chain[0], middleware.RuntimeAuthorizationMiddleware)
+    assert isinstance(chain[1], middleware.GovernanceMiddleware)
     assert set(hitl.interrupt_on) == middleware.WRITE_TOOL_NAMES
     assert all(
         {"approve", "reject"}.issubset(config["allowed_decisions"])

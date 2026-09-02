@@ -21,6 +21,7 @@ from customer_service_agent.agent_api.middleware import (
     GovernanceMiddleware,
     ModelBudgetExceeded,
     RunLimits,
+    RuntimeAuthorizationMiddleware,
     ToolBudgetExceeded,
     WRITE_TOOL_NAMES,
 )
@@ -380,6 +381,7 @@ def build_agent_middleware(
     max_read_retries: int,
 ) -> tuple[object, ...]:
     return (
+        RuntimeAuthorizationMiddleware(),
         GovernanceMiddleware(limits=limits, max_read_retries=max_read_retries),
         HumanInTheLoopMiddleware(
             interrupt_on={name: True for name in WRITE_TOOL_NAMES},

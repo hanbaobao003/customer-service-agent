@@ -46,10 +46,16 @@ async def test_write_tool_waits_for_approval_then_resumes_same_thread() -> None:
         ),
     )
     config = {"configurable": {"thread_id": "hitl-test-thread"}}
+    context = RuntimeContext.trusted(
+        customer_id="customer-a",
+        thread_id="hitl-test-thread",
+        request_id="request-hitl-test",
+    )
 
     paused = await agent.ainvoke(
         {"messages": [HumanMessage(content="创建订单")]},
         config=config,
+        context=context,
     )
 
     assert paused["__interrupt__"]
@@ -58,6 +64,7 @@ async def test_write_tool_waits_for_approval_then_resumes_same_thread() -> None:
     resumed = await agent.ainvoke(
         service.build_hitl_resume(decision="approve", reason=None),
         config=config,
+        context=context,
     )
 
     assert executed == [True]

@@ -17,6 +17,8 @@ from langchain.messages import ToolMessage
 from langgraph.types import Command
 from typing_extensions import NotRequired
 
+from customer_service_agent.shared.models import RuntimeContext
+
 
 WRITE_TOOL_NAMES = frozenset(
     {
@@ -35,6 +37,10 @@ class ToolBudgetExceeded(RuntimeError):
 
 
 class ModelBudgetExceeded(RuntimeError):
+    pass
+
+
+class TrustedContextMissing(PermissionError):
     pass
 
 
@@ -117,6 +123,17 @@ class GovernanceMiddleware(AgentMiddleware):
                 if retries_remaining == 0 or not _is_transient(error):
                     raise
                 retries_remaining -= 1
+
+
+class RuntimeAuthorizationMiddleware(AgentMiddleware):
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
+    ) -> ToolMessage | Command:
+        if not isinstance(request.runtime.context, RuntimeContext):
+            raise TrustedContextMissing("trusted runtime context is required")
+        return await handler(request)
 
 
 def _is_transient(error: Exception) -> bool:
