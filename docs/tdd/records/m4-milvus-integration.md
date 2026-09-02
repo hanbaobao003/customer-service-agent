@@ -2,8 +2,8 @@
 
 - Spec：`docs/specs/020-retrieval-and-indexing.md`
 - Plan：`docs/superpowers/plans/2026-09-02-m4-milvus-raptor-indexing.md`
-- 生产文件：`src/customer_service_agent/retrieval/indexing.py`、`src/customer_service_agent/retrieval/hybrid.py`
-- 测试文件：`tests/integration/milvus/test_resource_safety.py`、`tests/integration/milvus/test_milvus_hybrid.py`
+- 生产文件：`src/customer_service_agent/retrieval/indexing.py`、`src/customer_service_agent/retrieval/hybrid.py`、`src/customer_service_agent/retrieval/raptor.py`
+- 测试文件：`tests/integration/milvus/test_resource_safety.py`、`tests/integration/milvus/test_milvus_hybrid.py`、`tests/integration/milvus/test_milvus_raptor.py`
 
 ## RED
 
@@ -21,6 +21,7 @@
 - hybrid adapter 使用 custom schema（dynamic field 关闭），由 `child_text` 的内置 BM25 函数生成 sparse vector；dense 使用 COSINE，所有读取均强制 `data_version` filter，`get()` 对同一父文档的冲突值拒绝返回。
 - 当前 Docker Milvus 未启用 StorageV3：首次 `TEXT` schema 真实创建失败，报错要求启用 `common.storage.useLoonFFI`。按 Milvus BM25 的 `VARCHAR` 支持改为带 analyzer 的 `VARCHAR` 后，schema 成功创建。
 - 默认 analyzer 不能召回中文词；用户批准仅支持中文字符检索后，切换为内置 `chinese` analyzer。写入后的首次查询为空，诊断确认是可见性边界，adapter 在 insert 后显式 `flush()`；随后 dense、BM25、版本过滤与 parent 查询均通过。
+- RAPTOR 使用另一候选 collection 保存 node、树边、source、locator 和 dense vector；只有未被其他 node 引用的节点标记为 root。其根查询同时限定当前 `data_version` 与 `is_root == true`，并通过同一 store 下钻叶节点。
 
 ## 验证
 
@@ -28,5 +29,6 @@
 - Docker L3：`RUN_MILVUS_INTEGRATION=1 UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_resource_safety.py -q`，结果 `4 passed`。
 - 完整 unit/contract 回归：`192 passed, 13 deselected`。
 - hybrid Docker L3：`RUN_MILVUS_INTEGRATION=1 UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_milvus_hybrid.py -q`，结果 `1 passed`；连同资源隔离测试为 `5 passed`。
+- RAPTOR Docker L3：`RUN_MILVUS_INTEGRATION=1 UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_milvus_raptor.py -q`，结果 `1 passed`；三组 Milvus 集成测试合计 `6 passed`。
 - 当前完整 unit/contract 回归：`193 passed, 14 deselected`。
 - 已验证固定 1024 维测试向量下的 collection 创建、写入、flush、dense 搜索、Milvus BM25、版本过滤与 parent 读取。尚未调用 BGE embedding、reranker 或 DeepSeek；它们仍分别需要 `live_embedding`、`live_model` opt-in。

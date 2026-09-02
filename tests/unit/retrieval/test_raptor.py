@@ -1,5 +1,7 @@
 import pytest
 
+from customer_service_agent.retrieval import raptor
+
 from customer_service_agent.retrieval.raptor import (
     RaptorHit,
     RaptorIntegrityError,
@@ -50,6 +52,38 @@ class NodeStore:
         return self.nodes.get(node_id)
 
 
+class DeterministicSummarizer:
+    def __init__(self) -> None:
+        self.calls: list[tuple[tuple[str, ...], int, str]] = []
+
+    async def summarize(
+        self,
+        texts: tuple[str, ...],
+        *,
+        source_ids: tuple[str, ...],
+        level: int,
+        prompt_version: str,
+    ) -> str:
+        self.calls.append((source_ids, level, prompt_version))
+        return f"L{level}:{'|'.join(texts)}"
+
+
+def indexed_leaves(count: int) -> list[object]:
+    return [
+        raptor.RaptorLeaf(
+            node=RaptorNode.leaf(
+                document_id="return-policy",
+                text=f"第 {index} 节",
+                source_id=f"policy#{index}",
+                locator=f"section-{index}",
+                data_version="policy-v1",
+            ),
+            dense_vector=(float(index + 1), 1.0) + (0.0,) * 1022,
+        )
+        for index in range(count)
+    ]
+
+
 @pytest.mark.unit
 def test_summary_node_without_children_is_rejected() -> None:
     node = RaptorNode.summary(
@@ -63,6 +97,61 @@ def test_summary_node_without_children_is_rejected() -> None:
 
     with pytest.raises(RaptorIntegrityError, match="children"):
         validate_tree([node])
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_tree_builds_three_summary_levels_from_512_leaves() -> None:
+    summarizer = DeterministicSummarizer()
+
+    nodes = await raptor.build_raptor_tree(
+        indexed_leaves(512),
+        config=raptor.RaptorBuildConfig(),
+        summarizer=summarizer,
+    )
+
+    assert {node.level for node in nodes} == {0, 1, 2, 3}
+    assert {level: sum(node.level == level for node in nodes) for level in range(4)} == {
+        0: 512,
+        1: 64,
+        2: 8,
+        3: 1,
+    }
+    assert {prompt_version for _, _, prompt_version in summarizer.calls} == {
+        "raptor-summary-v1"
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_tail_leaf_joins_eight_siblings_instead_of_singleton_summary() -> None:
+    nodes = await raptor.build_raptor_tree(
+        indexed_leaves(9),
+        config=raptor.RaptorBuildConfig(),
+        summarizer=DeterministicSummarizer(),
+    )
+
+    first_summary = [node for node in nodes if node.level == 1]
+
+    assert len(first_summary) == 1
+    assert len(first_summary[0].child_ids) == 9
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"summary_levels": 2},
+        {"cluster_size": 7},
+        {"seed": 0},
+        {"prompt_version": "other"},
+    ],
+)
+def test_unapproved_raptor_build_parameters_are_rejected(
+    changes: dict[str, object],
+) -> None:
+    with pytest.raises(RaptorIntegrityError, match="approved"):
+        raptor.RaptorBuildConfig(**changes)
 
 
 @pytest.mark.unit

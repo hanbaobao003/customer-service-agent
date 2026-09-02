@@ -152,7 +152,7 @@ Expected: PASS；固定向量、Milvus 内置 BM25、版本过滤、small-to-big
 - Modify: src/customer_service_agent/retrieval/indexing.py
 - Modify: tests/unit/retrieval/test_raptor.py
 - Modify: tests/unit/retrieval/test_index_pipeline.py
-- Create: tests/integration/milvus/test_raptor.py
+- Create: tests/integration/milvus/test_milvus_raptor.py
 
 **Interfaces:**
 - Produces: RaptorBuildConfig(summary_levels=3, cluster_size=8, seed=42, prompt_version="raptor-summary-v1")。
@@ -160,7 +160,7 @@ Expected: PASS；固定向量、Milvus 内置 BM25、版本过滤、small-to-big
 - Produces: MilvusRaptorStore(client, collection_name, data_version) implementing NodeStorePort。
 - Consumes: PromptCatalog.render_raptor_summary() from the approved prompt-library plan。
 
-- [ ] **Step 1: 写失败测试，锁定层数、组大小与 prompt 版本**
+- [x] **Step 1: 写失败测试，锁定层数、组大小与 prompt 版本**
 
     @pytest.mark.asyncio
     async def test_build_tree_creates_exactly_three_summary_levels() -> None:
@@ -174,13 +174,13 @@ Expected: PASS；固定向量、Milvus 内置 BM25、版本过滤、small-to-big
 
 同时测试 9 个 sibling 分组为一个 9-child summary 而不是产生单子节点摘要；seed、cluster_size、summary_levels 任一偏离批准值均被拒绝。
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
 Run: UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_raptor.py tests/unit/retrieval/test_index_pipeline.py -q
 
 Expected: FAIL，因为真实 build config 和离线 tree builder 尚未存在；不是模型调用失败。
 
-- [ ] **Step 3: 实现确定性建树与摘要 port**
+- [x] **Step 3: 实现确定性建树与摘要 port**
 
     @dataclass(frozen=True)
     class RaptorBuildConfig:
@@ -193,17 +193,17 @@ Expected: FAIL，因为真实 build config 和离线 tree builder 尚未存在�
 
 将节点和节点向量写入独立 raptor_candidate_<run_id> collection，查询只读取匹配 data_version 的 root，随后使用既有 descend_hits()；artifact 保留 root、node path、leaf source 和 locator。
 
-- [ ] **Step 4: 运行 GREEN 与分层 L3 验证**
+- [x] **Step 4: 运行 GREEN 与分层 L3 验证**
 
-Run: RUN_MILVUS_INTEGRATION=1 UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_raptor.py -q
+Run: RUN_MILVUS_INTEGRATION=1 UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus tests/integration/milvus/test_milvus_raptor.py -q
 
 Expected: PASS；独立 raptor candidate collection 被创建、同 document/data_version 约束被保存、root 命中可下钻到实际 L0 来源，清理不会影响 hybrid candidate collection。
 
-- [ ] **Step 5: 记录 TDD 证据并提交**
+- [x] **Step 5: 记录 TDD 证据并提交**
 
     git add src/customer_service_agent/retrieval/raptor.py \
       src/customer_service_agent/retrieval/indexing.py tests/unit/retrieval/test_raptor.py \
-      tests/unit/retrieval/test_index_pipeline.py tests/integration/milvus/test_raptor.py \
+      tests/unit/retrieval/test_index_pipeline.py tests/integration/milvus/test_milvus_raptor.py \
       docs/tdd/records/m4-raptor-pure.md docs/tdd/records/m4-milvus-integration.md
     git commit -m "feat: build traceable RAPTOR indexes in Milvus"
 
