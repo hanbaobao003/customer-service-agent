@@ -121,6 +121,7 @@ class LangGraphAgentRunner:
         stream = self._agent.astream(
             agent_input,
             config={"configurable": {"thread_id": context.thread_id}},
+            context=context,
             stream_mode="updates",
         )
         try:

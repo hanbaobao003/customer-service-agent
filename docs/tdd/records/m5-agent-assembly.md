@@ -20,6 +20,7 @@
 - `LangGraphAgentRunner` 将模型或工具预算耗尽转换为脱敏的 `handoff.required`，reason code 为 `AGENT_EXECUTION_LIMIT`；未知异常不在此处伪装为业务转人工。
 - `build_customer_service_agent` 只创建一个固定名为 `customer_service_agent` 的 Agent。`build_deepseek_agent_model` 只接受运行时注入的 key 和 base URL，不读取、写入或输出密钥。
 - `LangGraphAgentRunner` 将 tool call、ToolMessage、最终 AI 文本和 HITL interrupt 映射为固定 `AppEvent`。恢复 SSE 流会再次收到 `tool.started`，这是 LangGraph 对待执行 action 的重放；工具仍只执行一次。
+- `LangGraphAgentRunner` 把可信 `RuntimeContext` 作为 LangGraph runtime context 传入；工具可读取服务端 customer scope，但该身份不进入模型消息或工具参数 schema。
 - 真实 PostgreSQL 集成验证了关闭并重建 `AsyncPostgresSaver` 后的 HITL 恢复；其测试数据库由既有隔离 fixture 创建和清理，不能替代生产数据库运维验证。
 - 真实 DeepSeek 验证仅确认一次固定的无业务数据 tool call；不证明完整业务工具选择、流式延迟、成本或模型质量。
 

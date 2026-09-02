@@ -2,6 +2,7 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
+from langchain.tools import ToolRuntime
 from langgraph.checkpoint.memory import InMemorySaver
 
 from customer_service_agent.agent_api import middleware, service
@@ -284,3 +285,52 @@ async def test_langgraph_runner_converts_call_budget_exhaustion_to_handoff() -> 
         "completed_steps": [],
         "suggested_next_step": "请转人工处理。",
     }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_langgraph_runner_passes_trusted_context_to_tool_runtime() -> None:
+    observed_customer_ids: list[str] = []
+
+    @tool
+    async def get_order(runtime: ToolRuntime[RuntimeContext]) -> str:
+        """Read a simulated order for the trusted customer."""
+        assert runtime.context is not None
+        observed_customer_ids.append(runtime.context.customer_id)
+        return "found"
+
+    runner = service.LangGraphAgentRunner(
+        service.build_customer_service_agent(
+            model=ToolAwareFakeMessagesListChatModel(
+                responses=[
+                    AIMessage(
+                        content="",
+                        tool_calls=[{"name": "get_order", "args": {}, "id": "call-1"}],
+                    ),
+                    AIMessage(content="订单已找到。"),
+                ]
+            ),
+            tools=(get_order,),
+            checkpointer=InMemorySaver(),
+            system_prompt="专业中文客服",
+            middleware=service.build_agent_middleware(
+                limits=middleware.RunLimits(model_calls=4, tool_calls=8),
+                max_read_retries=1,
+            ),
+        )
+    )
+
+    events = [
+        event
+        async for event in runner.stream(
+            context=RuntimeContext.trusted(
+                customer_id="customer-a",
+                thread_id="thread-context",
+                request_id="request-context",
+            ),
+            message="查询订单",
+        )
+    ]
+
+    assert observed_customer_ids == ["customer-a"]
+    assert events[-1].event_type is EventType.MESSAGE_COMPLETED
