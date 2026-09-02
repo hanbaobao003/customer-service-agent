@@ -17,7 +17,13 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.types import Command
 
-from customer_service_agent.agent_api.middleware import GovernanceMiddleware, RunLimits, WRITE_TOOL_NAMES
+from customer_service_agent.agent_api.middleware import (
+    GovernanceMiddleware,
+    ModelBudgetExceeded,
+    RunLimits,
+    ToolBudgetExceeded,
+    WRITE_TOOL_NAMES,
+)
 from customer_service_agent.shared.errors import ServiceError
 from customer_service_agent.shared.models import AppEvent, EventSequencer, EventType, RuntimeContext
 
@@ -117,9 +123,20 @@ class LangGraphAgentRunner:
             config={"configurable": {"thread_id": context.thread_id}},
             stream_mode="updates",
         )
-        async for update in stream:
-            for event in self._events_from_update(update, sequencer, started_at):
-                yield event
+        try:
+            async for update in stream:
+                for event in self._events_from_update(update, sequencer, started_at):
+                    yield event
+        except (ModelBudgetExceeded, ToolBudgetExceeded):
+            yield sequencer.emit(
+                EventType.HANDOFF_REQUIRED,
+                {
+                    "reason_code": "AGENT_EXECUTION_LIMIT",
+                    "summary": "为保障服务稳定，本次请求需要人工协助。",
+                    "completed_steps": [],
+                    "suggested_next_step": "请转人工处理。",
+                },
+            )
 
     @staticmethod
     def _events_from_update(

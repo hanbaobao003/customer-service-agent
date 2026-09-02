@@ -265,7 +265,7 @@ tests/integration/postgres/                         # 检查点暂停/恢复与�
 
 ### Task 5: 异步中间件、Agent 工厂与 PostgreSQL 恢复
 
-**实施状态（2026-09-02）：** 进行中。已完成单 Agent 工厂、DeepSeek 模型工厂、异步工具治理、HITL 暂停/恢复、公开事件适配，以及 PostgreSQL saver 重建恢复验证。独立可信审计/模型预算/摘要中间件、重复决策幂等和完整 HTTP 错误映射仍未实现，因此本 Task 不标记完成。
+**实施状态（2026-09-03）：** 进行中。已完成单 Agent 工厂、DeepSeek 模型工厂、模型/工具预算、有限暂时性重试、HITL 暂停/恢复、公开事件适配，以及 PostgreSQL saver 重建恢复验证。独立可信审计/摘要中间件、重复决策幂等和完整 HTTP 错误映射仍未实现，因此本 Task 不标记完成。
 
 **Files:**
 - Create: `src/customer_service_agent/agent_api/middleware.py`

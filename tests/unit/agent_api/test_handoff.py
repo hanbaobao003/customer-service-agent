@@ -234,3 +234,53 @@ async def test_langgraph_runner_resumes_only_the_pending_thread_interrupt() -> N
         EventType.MESSAGE_DELTA,
         EventType.MESSAGE_COMPLETED,
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_langgraph_runner_converts_call_budget_exhaustion_to_handoff() -> None:
+    @tool
+    async def lookup() -> str:
+        """Read a fixed test value."""
+        return "found"
+
+    runner = service.LangGraphAgentRunner(
+        service.build_customer_service_agent(
+            model=ToolAwareFakeMessagesListChatModel(
+                responses=[
+                    AIMessage(
+                        content="",
+                        tool_calls=[{"name": "lookup", "args": {}, "id": "call-1"}],
+                    ),
+                    AIMessage(content="完成"),
+                ]
+            ),
+            tools=(lookup,),
+            checkpointer=InMemorySaver(),
+            system_prompt="专业中文客服",
+            middleware=service.build_agent_middleware(
+                limits=middleware.RunLimits(model_calls=1, tool_calls=8),
+                max_read_retries=1,
+            ),
+        )
+    )
+
+    events = [
+        event
+        async for event in runner.stream(
+            context=RuntimeContext.trusted(
+                customer_id="customer-a",
+                thread_id="thread-limit",
+                request_id="request-limit",
+            ),
+            message="查询",
+        )
+    ]
+
+    assert events[-1].event_type is EventType.HANDOFF_REQUIRED
+    assert events[-1].payload == {
+        "reason_code": "AGENT_EXECUTION_LIMIT",
+        "summary": "为保障服务稳定，本次请求需要人工协助。",
+        "completed_steps": [],
+        "suggested_next_step": "请转人工处理。",
+    }

@@ -16,6 +16,8 @@
 ## GREEN 与验证边界
 
 - `GovernanceMiddleware.awrap_tool_call` 等待异步 handler；只读工具可进行有限的连接/超时重试，写工具零重试；工具上限受控。
+- 模型与工具调用计数通过 LangGraph `Command(update=...)` 保存在仅中间件可见的 state 中；第二次超限调用会终止循环。连接、超时、429 与 5xx 可有限重试，401 不重试。
+- `LangGraphAgentRunner` 将模型或工具预算耗尽转换为脱敏的 `handoff.required`，reason code 为 `AGENT_EXECUTION_LIMIT`；未知异常不在此处伪装为业务转人工。
 - `build_customer_service_agent` 只创建一个固定名为 `customer_service_agent` 的 Agent。`build_deepseek_agent_model` 只接受运行时注入的 key 和 base URL，不读取、写入或输出密钥。
 - `LangGraphAgentRunner` 将 tool call、ToolMessage、最终 AI 文本和 HITL interrupt 映射为固定 `AppEvent`。恢复 SSE 流会再次收到 `tool.started`，这是 LangGraph 对待执行 action 的重放；工具仍只执行一次。
 - 真实 PostgreSQL 集成验证了关闭并重建 `AsyncPostgresSaver` 后的 HITL 恢复；其测试数据库由既有隔离 fixture 创建和清理，不能替代生产数据库运维验证。
@@ -23,5 +25,5 @@
 
 ## 当前未完成边界
 
-- 可信上下文/审计、模型调用上限、会话摘要和标准化 `handoff.required` 尚未拆分为计划所列的独立中间件。
+- 可信上下文/审计和会话摘要尚未拆分为计划所列的独立中间件。
 - `INTERRUPT_NOT_FOUND`、重复 decision 的持久幂等结果和完整 API HTTP 错误映射仍待后续 M5 切片实现。

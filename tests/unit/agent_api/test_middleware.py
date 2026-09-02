@@ -1,11 +1,20 @@
 import pytest
-from langchain.agents.middleware import ToolCallRequest
+from langchain.agents.middleware import ModelRequest, ModelResponse, ToolCallRequest
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain.messages import ToolMessage
 from langchain.tools import ToolRuntime
+from langchain_core.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from customer_service_agent.agent_api import middleware
 from customer_service_agent.agent_api import service
+
+
+class ToolAwareFakeMessagesListChatModel(FakeMessagesListChatModel):
+    def bind_tools(self, _tools: object, **_kwargs: object) -> "ToolAwareFakeMessagesListChatModel":
+        return self
 
 
 def request(tool_name: str) -> ToolCallRequest:
@@ -39,7 +48,9 @@ async def test_async_middleware_awaits_handler_and_returns_result() -> None:
     ).awrap_tool_call(request("web_search"), handler)
 
     assert called is True
-    assert result.content == "ok"
+    assert isinstance(result, Command)
+    assert result.update["messages"][0].content == "ok"
+    assert result.update["governance_tool_calls"] == 1
 
 
 @pytest.mark.unit
@@ -60,7 +71,8 @@ async def test_read_tool_retries_a_transient_failure_once() -> None:
     ).awrap_tool_call(request("web_search"), handler)
 
     assert attempts == 2
-    assert result.content == "ok"
+    assert isinstance(result, Command)
+    assert result.update["messages"][0].content == "ok"
 
 
 @pytest.mark.unit
@@ -97,11 +109,145 @@ async def test_tool_budget_blocks_handler_after_limit_is_reached() -> None:
         calls += 1
         return ToolMessage(content="ok", tool_call_id="call-1")
 
-    await guarded.awrap_tool_call(shared_request, handler)
+    first = await guarded.awrap_tool_call(shared_request, handler)
+    assert isinstance(first, Command)
+    shared_request.state.update(first.update)
     with pytest.raises(middleware.ToolBudgetExceeded):
         await guarded.awrap_tool_call(shared_request, handler)
 
     assert calls == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_model_budget_blocks_second_agent_model_call() -> None:
+    @tool
+    async def lookup() -> str:
+        """Read a fixed test value."""
+        return "found"
+
+    agent = service.build_customer_service_agent(
+        model=ToolAwareFakeMessagesListChatModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "lookup", "args": {}, "id": "call-1"}],
+                ),
+                AIMessage(content="完成"),
+            ]
+        ),
+        tools=(lookup,),
+        checkpointer=InMemorySaver(),
+        system_prompt="专业中文客服",
+        middleware=service.build_agent_middleware(
+            limits=middleware.RunLimits(model_calls=1, tool_calls=8),
+            max_read_retries=1,
+        ),
+    )
+
+    with pytest.raises(middleware.ModelBudgetExceeded):
+        await agent.ainvoke(
+            {"messages": [HumanMessage(content="查询")]},
+            config={"configurable": {"thread_id": "model-limit"}},
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_model_call_retries_transient_http_error_once() -> None:
+    attempts = 0
+
+    class UpstreamError(RuntimeError):
+        status_code = 503
+
+    async def handler(_request: ModelRequest) -> ModelResponse:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise UpstreamError("temporary")
+        return ModelResponse(result=[AIMessage(content="完成")])
+
+    result = await middleware.GovernanceMiddleware(
+        limits=middleware.RunLimits(model_calls=4, tool_calls=8),
+        max_model_retries=1,
+    ).awrap_model_call(
+        ModelRequest(
+            model=ToolAwareFakeMessagesListChatModel(responses=[]),
+            messages=[],
+            state={"messages": []},
+        ),
+        handler,
+    )
+
+    assert attempts == 2
+    assert result.model_response.result[0].content == "完成"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_model_call_does_not_retry_authentication_error() -> None:
+    attempts = 0
+
+    class UpstreamError(RuntimeError):
+        status_code = 401
+
+    async def handler(_request: ModelRequest) -> ModelResponse:
+        nonlocal attempts
+        attempts += 1
+        raise UpstreamError("authentication failed")
+
+    with pytest.raises(UpstreamError):
+        await middleware.GovernanceMiddleware(
+            limits=middleware.RunLimits(model_calls=4, tool_calls=8),
+            max_model_retries=1,
+        ).awrap_model_call(
+            ModelRequest(
+                model=ToolAwareFakeMessagesListChatModel(responses=[]),
+                messages=[],
+                state={"messages": []},
+            ),
+            handler,
+        )
+
+    assert attempts == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_tool_budget_blocks_second_agent_tool_call() -> None:
+    @tool
+    async def lookup() -> str:
+        """Read a fixed test value."""
+        return "found"
+
+    agent = service.build_customer_service_agent(
+        model=ToolAwareFakeMessagesListChatModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "lookup", "args": {}, "id": "call-1"}],
+                ),
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "lookup", "args": {}, "id": "call-2"}],
+                ),
+                AIMessage(content="完成"),
+            ]
+        ),
+        tools=(lookup,),
+        checkpointer=InMemorySaver(),
+        system_prompt="专业中文客服",
+        middleware=service.build_agent_middleware(
+            limits=middleware.RunLimits(model_calls=4, tool_calls=1),
+            max_read_retries=1,
+        ),
+    )
+
+    with pytest.raises(middleware.ToolBudgetExceeded):
+        await agent.ainvoke(
+            {"messages": [HumanMessage(content="查询")]},
+            config={"configurable": {"thread_id": "tool-limit"}},
+        )
 
 
 @pytest.mark.unit
