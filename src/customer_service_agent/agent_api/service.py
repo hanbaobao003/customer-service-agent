@@ -1,9 +1,14 @@
 """Application service boundary for customer conversations."""
 
 import asyncio
+import string
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncContextManager, Protocol
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, AsyncContextManager, Protocol
+
+import yaml
 
 from customer_service_agent.shared.errors import ServiceError
 from customer_service_agent.shared.models import AppEvent, RuntimeContext
@@ -41,6 +46,155 @@ class _ThreadCustomerMismatch(Exception):
 
 class _ThreadBusy(Exception):
     pass
+
+
+class PromptConfigError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class RenderedPrompt:
+    system: str
+    user: str | None = None
+    version: str | None = None
+
+
+class PromptCatalog:
+    def __init__(
+        self,
+        *,
+        agent_system: str,
+        raptor_version: str,
+        raptor_system: str,
+        raptor_user: str,
+    ) -> None:
+        self._agent_system = agent_system
+        self._raptor_version = raptor_version
+        self._raptor_system = raptor_system
+        self._raptor_user = raptor_user
+
+    @classmethod
+    def from_path(cls, path: Path) -> "PromptCatalog":
+        try:
+            payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except OSError as error:
+            raise PromptConfigError("prompt config cannot be read") from error
+        except yaml.YAMLError as error:
+            raise PromptConfigError("prompt config is invalid YAML") from error
+
+        return cls(**_validate_prompt_payload(payload))
+
+    def render_raptor_summary(
+        self,
+        *,
+        source_ids: tuple[str, ...],
+        content: str | None = None,
+    ) -> RenderedPrompt:
+        if content is None:
+            raise PromptConfigError("missing placeholder: content")
+        return RenderedPrompt(
+            system=self._raptor_system,
+            user=_render_template(
+                self._raptor_user,
+                allowed={"source_ids", "content"},
+                values={
+                    "source_ids": ", ".join(source_ids),
+                    "content": content,
+                },
+            ),
+            version=self._raptor_version,
+        )
+
+    def render_agent_system(
+        self,
+        *,
+        trusted_context: str,
+        tool_policy: str,
+    ) -> RenderedPrompt:
+        return RenderedPrompt(
+            system=_render_template(
+                self._agent_system,
+                allowed={"trusted_context", "tool_policy"},
+                values={
+                    "trusted_context": trusted_context,
+                    "tool_policy": tool_policy,
+                },
+            )
+        )
+
+
+def build_agent_prompt(
+    catalog: PromptCatalog,
+    *,
+    context: RuntimeContext,
+    tool_policy: str,
+) -> RenderedPrompt:
+    if not tool_policy.strip():
+        raise PromptConfigError("tool policy must not be blank")
+    return catalog.render_agent_system(
+        trusted_context=f"服务渠道：{context.channel}；语言：{context.locale}。",
+        tool_policy=tool_policy,
+    )
+
+
+def _validate_prompt_payload(payload: object) -> dict[str, str]:
+    if not isinstance(payload, dict) or payload.get("version") != 1:
+        raise PromptConfigError("prompt config version must be 1")
+    agent = _mapping(payload, "agent")
+    customer_service = _mapping(agent, "customer_service")
+    retrieval = _mapping(payload, "retrieval")
+    raptor_summary = _mapping(retrieval, "raptor_summary")
+
+    agent_system = _text(customer_service, "system")
+    raptor_version = _text(raptor_summary, "version")
+    raptor_system = _text(raptor_summary, "system")
+    raptor_user = _text(raptor_summary, "user")
+    _validate_template(agent_system, {"trusted_context", "tool_policy"})
+    _validate_template(raptor_system, set())
+    _validate_template(raptor_user, {"source_ids", "content"})
+    return {
+        "agent_system": agent_system,
+        "raptor_version": raptor_version,
+        "raptor_system": raptor_system,
+        "raptor_user": raptor_user,
+    }
+
+
+def _mapping(value: dict[str, Any], key: str) -> dict[str, Any]:
+    result = value.get(key)
+    if not isinstance(result, dict):
+        raise PromptConfigError(f"missing mapping: {key}")
+    return result
+
+
+def _text(value: dict[str, Any], key: str) -> str:
+    result = value.get(key)
+    if not isinstance(result, str) or not result.strip():
+        raise PromptConfigError(f"missing text: {key}")
+    return result
+
+
+def _validate_template(template: str, allowed: set[str]) -> None:
+    fields = {
+        field_name
+        for _, field_name, _, _ in string.Formatter().parse(template)
+        if field_name is not None
+    }
+    unknown = fields - allowed
+    if unknown:
+        raise PromptConfigError(f"unknown placeholder: {sorted(unknown)[0]}")
+
+
+def _render_template(
+    template: str,
+    *,
+    allowed: set[str],
+    values: dict[str, str],
+) -> str:
+    missing = allowed - values.keys()
+    if missing:
+        raise PromptConfigError(f"missing placeholder: {sorted(missing)[0]}")
+    return template.format_map(values)
 
 
 class InMemoryThreadBindings:
