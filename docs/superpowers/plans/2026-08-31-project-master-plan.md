@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to execute this roadmap milestone by milestone. Entering a feature task also requires `superpowers:test-driven-development`; the five child plans remain the source of exact RED→GREEN steps.
 
-**状态：** 已批准，M0–M3 已完成；M4 进行中（Task 2–3 纯函数、Task 4、Task 5 状态机已完成）
+**状态：** 已批准，M0–M4 已完成；M5 进行中（Agent 工厂、持久 HITL、预算、有限重试、可信 runtime-context 已完成，摘要与 decision 幂等待完成）
 
 **版本：** 1.0
 
@@ -151,6 +151,12 @@ DG-001 的批准版本记录在 [M0 运行时与 Docker 兼容性基线](../../d
 - Neo4j 不可用时，GraphRAG 集成保持明确阻塞，其他检索结果单独报告。
 
 ### M5：Agent 组装、治理与持久恢复
+
+**状态：** 进行中（2026-09-03）。
+
+已完成：单 `create_agent` 工厂、`deepseek-v4-flash` 的真实工具调用验证、异步模型/工具预算、有限暂时性重试、持久 HITL 暂停/恢复、PostgreSQL saver 重建恢复、可信 `RuntimeContext` 向工具 runtime 传递。
+
+未完成：受控会话摘要、独立审计中间件、重复 decision 的持久幂等结果、完整 API HTTP 错误映射，以及全工具实际组装与路由验证。
 
 **前置：** M2 完成；M3、M4 提供稳定工具接口；DG-002 在真实模型工厂前获批。
 

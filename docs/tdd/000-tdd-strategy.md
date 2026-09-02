@@ -1,6 +1,6 @@
 # 智能客服 Agent TDD 执行规范
 
-**状态：** 已批准，实施中（M3 已完成；M4 Task 2–3 纯函数、Task 4 与 Task 5 状态机已完成）
+**状态：** 已批准，实施中（M0–M4 已完成；M5 进行中，已覆盖 Agent 持久 HITL、预算、重试与可信 runtime-context）
 
 **版本：** 1.1
 
@@ -12,7 +12,7 @@
 
 本文定义本项目从规格到实现的测试先行流程。它约束测试分层、RED–GREEN–REFACTOR 证据、外部服务隔离、测试数据安全和阶段验收，不定义产品行为；产品行为以六份 SDD Spec 为准。
 
-实施已获用户批准。M1–M3 已完成，包括订单写操作、受控 SQL、PostgreSQL 原子事务和隔离的 Mem0 PGVector；后续任务仍须逐项遵循本文的 RED–GREEN–REFACTOR 门禁。
+实施已获用户批准。M1–M4 已完成，包括订单写操作、受控 SQL、PostgreSQL 原子事务、隔离的 Mem0 PGVector 和三类检索索引；M5 的 Agent 组装仍需逐项遵循本文的 RED–GREEN–REFACTOR 门禁。
 
 ## 2. 强制原则
 
