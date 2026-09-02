@@ -1,8 +1,13 @@
 """Retrieval tool policies and result DTOs."""
 
+import json
 from datetime import datetime
+from typing import Protocol
 
+from langchain.tools import tool
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
+
+from customer_service_agent.retrieval.models import RetrievalResult
 
 
 class WebSearchRejected(ValueError):
@@ -60,3 +65,52 @@ class WebSearchResult(BaseModel):
             summary=summary[:max_summary_chars],
             truncated=len(summary) > max_summary_chars,
         )
+
+
+class RetrievalToolServicePort(Protocol):
+    async def search_product_faq(self, query: str) -> RetrievalResult: ...
+
+    async def search_policy_raptor(self, query: str) -> RetrievalResult: ...
+
+    async def search_commerce_graph(self, query: str) -> RetrievalResult: ...
+
+    async def web_search(self, query: str) -> RetrievalResult: ...
+
+
+def create_retrieval_tools(service: RetrievalToolServicePort):
+    @tool("search_product_faq", response_format="content_and_artifact")
+    async def search_product_faq(query: str) -> tuple[str, dict[str, object]]:
+        """检索商品信息与常见问题。"""
+        return _tool_output(await service.search_product_faq(query))
+
+    @tool("search_policy_raptor", response_format="content_and_artifact")
+    async def search_policy_raptor(query: str) -> tuple[str, dict[str, object]]:
+        """检索可追溯的政策与手册证据。"""
+        return _tool_output(await service.search_policy_raptor(query))
+
+    @tool("search_commerce_graph", response_format="content_and_artifact")
+    async def search_commerce_graph(query: str) -> tuple[str, dict[str, object]]:
+        """检索商品、品牌、品类与活动的固定图谱关系。"""
+        return _tool_output(await service.search_commerce_graph(query))
+
+    @tool("web_search", response_format="content_and_artifact")
+    async def web_search(query: str) -> tuple[str, dict[str, object]]:
+        """查询可信的外部时效信息。"""
+        return _tool_output(await service.web_search(query))
+
+    return (
+        search_product_faq,
+        search_policy_raptor,
+        search_commerce_graph,
+        web_search,
+    )
+
+
+def _tool_output(result: RetrievalResult) -> tuple[str, dict[str, object]]:
+    return (
+        json.dumps(result.to_model_dict(), ensure_ascii=False),
+        {
+            "retrieval": result.artifact.model_dump(mode="json"),
+            "citations": [item.model_dump(mode="json") for item in result.citations],
+        },
+    )

@@ -247,7 +247,7 @@ tests/integration/neo4j/
 - Produces: `IndexPipeline.build_candidate/validate/publish`。
 - Produces: `search_product_faq`、`search_policy_raptor`、`search_commerce_graph`、`web_search`。
 
-- [ ] **Step 1: 写失败构建不切换版本 RED**
+- [x] **Step 1: 写失败构建不切换版本 RED**
 
   ```python
   def test_failed_candidate_never_replaces_published_version():
@@ -258,19 +258,19 @@ tests/integration/neo4j/
       assert publisher.current == "v1"
   ```
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_index_pipeline.py -q`
 
-- [ ] **Step 3: 实现显式状态机和脱敏报告**
+- [x] **Step 3: 实现显式状态机和脱敏报告**
 
   状态只允许 `candidate_built -> validated -> published`；任何失败写报告但不调用 publisher。报告包含输入哈希、数量、配置引用、耗时和 smoke 结果，不包含密钥/连接串/供应商原文。
 
-- [ ] **Step 4: 运行 GREEN 和工具契约回归**
+- [x] **Step 4: 运行 GREEN 和工具契约回归**
 
   Run: `UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_index_pipeline.py tests/contract/test_retrieval_tools.py -q`
 
-- [ ] **Step 5: 提交索引发布切片**
+- [x] **Step 5: 提交索引发布切片**
 
   Commit: `feat: add versioned offline index publication`
 
