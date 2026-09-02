@@ -1,11 +1,11 @@
 import pytest
 
-from customer_service_agent.cli import parse_cli_request
+from customer_service_agent import cli
 
 
 @pytest.mark.contract
 def test_cli_customer_identity_stays_in_trusted_context_not_message() -> None:
-    context, message = parse_cli_request(
+    context, message = cli.parse_cli_request(
         [
             "--customer-id",
             "customer-a",
@@ -21,3 +21,23 @@ def test_cli_customer_identity_stays_in_trusted_context_not_message() -> None:
     assert context.request_id == "request-1"
     assert context.channel == "cli"
     assert message == "查询订单"
+
+
+@pytest.mark.contract
+def test_cli_index_build_parses_only_an_approved_offline_kind() -> None:
+    request = cli.parse_index_build_request(
+        ["index-build", "--kind", "raptor", "--data-version", "policy-v1"]
+    )
+
+    assert request.kind == "raptor"
+    assert request.data_version == "policy-v1"
+
+
+@pytest.mark.contract
+def test_cli_index_build_rejects_unknown_kind_before_client_creation() -> None:
+    with pytest.raises(SystemExit) as error:
+        cli.parse_index_build_request(
+            ["index-build", "--kind", "unknown", "--data-version", "v1"]
+        )
+
+    assert error.value.code == 2

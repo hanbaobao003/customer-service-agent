@@ -1,5 +1,9 @@
 import pytest
 
+from pathlib import Path
+from types import SimpleNamespace
+
+from customer_service_agent.agent_api.service import PromptCatalog
 from customer_service_agent.retrieval import raptor
 
 from customer_service_agent.retrieval.raptor import (
@@ -66,6 +70,18 @@ class DeterministicSummarizer:
     ) -> str:
         self.calls.append((source_ids, level, prompt_version))
         return f"L{level}:{'|'.join(texts)}"
+
+
+class CompletionClient:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.chat = SimpleNamespace(completions=self)
+
+    async def create(self, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="简洁政策摘要"))]
+        )
 
 
 def indexed_leaves(count: int) -> list[object]:
@@ -152,6 +168,49 @@ def test_unapproved_raptor_build_parameters_are_rejected(
 ) -> None:
     with pytest.raises(RaptorIntegrityError, match="approved"):
         raptor.RaptorBuildConfig(**changes)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_deepseek_summarizer_renders_catalog_prompt_with_fixed_parameters() -> None:
+    client = CompletionClient()
+    catalog = PromptCatalog.from_path(
+        Path(__file__).parents[3] / "config" / "prompts.yaml"
+    )
+    summarizer = raptor.DeepSeekRaptorSummarizer(
+        client=client,
+        prompt_catalog=catalog,
+        model="deepseek-v4-flash",
+    )
+
+    summary = await summarizer.summarize(
+        ("未发货订单可取消。",),
+        source_ids=("policy#cancel",),
+        level=1,
+        prompt_version="raptor-summary-v1",
+    )
+
+    assert summary == "简洁政策摘要"
+    assert client.calls == [
+        {
+            "model": "deepseek-v4-flash",
+            "temperature": 0,
+            "max_tokens": 300,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "你负责将同一客服政策文档中的相邻内容压缩为可追溯摘要。\n"
+                        "只总结给定内容，不补充外部事实；保留适用条件、限制、例外和关键数字。\n"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": "来源编号：policy#cancel\n内容：\n未发货订单可取消。\n",
+                },
+            ],
+        }
+    ]
 
 
 @pytest.mark.unit

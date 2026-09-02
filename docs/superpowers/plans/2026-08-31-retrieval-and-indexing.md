@@ -18,6 +18,7 @@
 - GraphRAG 只允许白名单模板，禁止执行模型生成 Cypher。
 - Tavily 不得用于内部商品、政策、订单或退货规则。
 - Milvus 不承担 Mem0 长期记忆；Mem0 使用 PostgreSQL/pgvector。
+- M4 补充计划已完成隔离 Milvus hybrid/RAPTOR L3、候选发布 alias 边界和一次 DeepSeek 短摘要 live 验证；真实 embedding/reranker 与业务数据导入仍按其独立 opt-in/实施门执行。
 
 ## File Structure
 

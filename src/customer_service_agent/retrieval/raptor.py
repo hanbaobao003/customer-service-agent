@@ -9,6 +9,7 @@ from typing import Protocol
 
 from pymilvus import DataType
 
+from customer_service_agent.agent_api.service import PromptCatalog
 from customer_service_agent.retrieval.models import RetrievalArtifact, RetrievalHit
 
 
@@ -141,6 +142,49 @@ class SummarizerPort(Protocol):
         level: int,
         prompt_version: str,
     ) -> str: ...
+
+
+class DeepSeekRaptorSummarizer:
+    def __init__(
+        self,
+        *,
+        client: object,
+        prompt_catalog: PromptCatalog,
+        model: str,
+    ) -> None:
+        if model != "deepseek-v4-flash":
+            raise RaptorIntegrityError("only approved RAPTOR summary model is allowed")
+        self._client = client
+        self._prompt_catalog = prompt_catalog
+        self._model = model
+
+    async def summarize(
+        self,
+        texts: Sequence[str],
+        *,
+        source_ids: Sequence[str],
+        level: int,
+        prompt_version: str,
+    ) -> str:
+        prompt = self._prompt_catalog.render_raptor_summary(
+            source_ids=tuple(source_ids),
+            content="\n\n".join(texts),
+        )
+        if prompt.version != prompt_version:
+            raise RaptorIntegrityError("RAPTOR prompt version does not match catalog")
+        response = await self._client.chat.completions.create(
+            model=self._model,
+            temperature=0,
+            max_tokens=300,
+            messages=[
+                {"role": "system", "content": prompt.system},
+                {"role": "user", "content": prompt.user},
+            ],
+        )
+        content = response.choices[0].message.content
+        if not isinstance(content, str) or not content.strip():
+            raise RaptorIntegrityError("RAPTOR summary response must not be empty")
+        return content.strip()
 
 
 def create_raptor_collection(client: object, collection_name: str) -> None:

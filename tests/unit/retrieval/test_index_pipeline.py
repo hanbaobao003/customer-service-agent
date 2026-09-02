@@ -7,6 +7,7 @@ from customer_service_agent.retrieval.indexing import (
     PublishedIndexRef,
     ValidationResult,
 )
+from customer_service_agent.retrieval import indexing
 
 
 class Builder:
@@ -67,6 +68,18 @@ class ReportSink:
 
     def write(self, report: object) -> None:
         self.reports.append(report)
+
+
+class AliasClient:
+    def __init__(self, *, smoke_passes: bool) -> None:
+        self.smoke_passes = smoke_passes
+        self.alias_calls: list[tuple[str, str]] = []
+
+    def smoke(self, collection_name: str) -> bool:
+        return self.smoke_passes and collection_name == "candidate/v2"
+
+    def alter_alias(self, *, collection_name: str, alias: str) -> None:
+        self.alias_calls.append((collection_name, alias))
 
 
 def pipeline(
@@ -159,3 +172,49 @@ def test_validator_exception_is_reported_without_publishing() -> None:
     assert report.stages == ("candidate_built",)
     assert report.failure_stage == "validation"
     assert report.failure_code == "ConnectionError"
+
+
+@pytest.mark.unit
+def test_milvus_publisher_keeps_previous_ref_when_smoke_fails() -> None:
+    client = AliasClient(smoke_passes=False)
+    publisher = indexing.MilvusIndexPublisher(
+        client=client,
+        current_refs={"hybrid": "published/v1"},
+    )
+    candidate = CandidateIndex(
+        data_version="v2",
+        index_ref="candidate/v2",
+        input_hash="sha256:fixture",
+        document_count=1,
+        item_count=1,
+        config_ref="retrieval-config-v1",
+        duration_ms=1.0,
+    )
+
+    with pytest.raises(IndexBuildFailed, match="validation"):
+        publisher.publish(candidate)
+
+    assert publisher.current_ref("hybrid") == "published/v1"
+    assert client.alias_calls == []
+
+
+@pytest.mark.unit
+def test_milvus_publisher_switches_only_matching_kind_alias_after_smoke() -> None:
+    client = AliasClient(smoke_passes=True)
+    publisher = indexing.MilvusIndexPublisher(client=client, current_refs={})
+    candidate = CandidateIndex(
+        data_version="v2",
+        index_ref="candidate/v2",
+        input_hash="sha256:fixture",
+        document_count=1,
+        item_count=1,
+        config_ref="retrieval-config-v1",
+        duration_ms=1.0,
+        kind="raptor",
+    )
+
+    published = publisher.publish(candidate)
+
+    assert published.index_ref == "candidate/v2"
+    assert publisher.current_ref("raptor") == "candidate/v2"
+    assert client.alias_calls == [("candidate/v2", "raptor_current")]

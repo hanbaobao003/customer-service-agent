@@ -54,6 +54,7 @@ class CandidateIndex:
     item_count: int
     config_ref: str
     duration_ms: float
+    kind: Literal["hybrid", "raptor"] = "hybrid"
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,39 @@ class CandidateValidatorPort(Protocol):
 
 class IndexPublisherPort(Protocol):
     def publish(self, candidate: CandidateIndex) -> PublishedIndexRef: ...
+
+
+class MilvusAliasClientPort(Protocol):
+    def smoke(self, collection_name: str) -> bool: ...
+
+    def alter_alias(self, *, collection_name: str, alias: str) -> None: ...
+
+
+class MilvusIndexPublisher:
+    def __init__(
+        self,
+        *,
+        client: MilvusAliasClientPort,
+        current_refs: dict[str, str],
+    ) -> None:
+        self._client = client
+        self._current_refs = dict(current_refs)
+
+    def current_ref(self, kind: Literal["hybrid", "raptor"]) -> str | None:
+        return self._current_refs.get(kind)
+
+    def publish(self, candidate: CandidateIndex) -> PublishedIndexRef:
+        if not self._client.smoke(candidate.index_ref):
+            raise IndexBuildFailed("validation failed")
+        self._client.alter_alias(
+            collection_name=candidate.index_ref,
+            alias=f"{candidate.kind}_current",
+        )
+        self._current_refs[candidate.kind] = candidate.index_ref
+        return PublishedIndexRef(
+            data_version=candidate.data_version,
+            index_ref=candidate.index_ref,
+        )
 
 
 class BuildReportSinkPort(Protocol):

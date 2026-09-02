@@ -219,9 +219,9 @@ Expected: PASS；独立 raptor candidate collection 被创建、同 document/dat
 **Interfaces:**
 - Produces: MilvusIndexPublisher.publish(candidate: CandidateIndex) -> PublishedIndexRef。
 - Produces: CLI command index-build --kind hybrid|raptor --data-version <value>。
-- Produces: DeepSeekRaptorSummarizer only when RUN_LIVE_MODEL=1。
+- Produces: DeepSeekRaptorSummarizer only when `RUN_LIVE_MODEL_TESTS=1`。
 
-- [ ] **Step 1: 写失败测试，证明发布前检查与 CLI 只走离线端口**
+- [x] **Step 1: 写失败测试，证明发布前检查与 CLI 只走离线端口**
 
     def test_cli_index_build_rejects_unknown_kind_before_client_creation() -> None:
         with pytest.raises(SystemExit, match="2"):
@@ -234,29 +234,29 @@ Expected: PASS；独立 raptor candidate collection 被创建、同 document/dat
             publisher.publish(candidate("candidate/v2"))
         assert publisher.current_ref("hybrid") == "published/v1"
 
-- [ ] **Step 2: 运行 RED**
+- [x] **Step 2: 运行 RED**
 
 Run: UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_index_pipeline.py tests/contract/test_cli_contract.py -q
 
 Expected: FAIL，因为 Milvus publisher 与 index-build CLI 解析尚未定义。
 
-- [ ] **Step 3: 实现最小发布器和 CLI**
+- [x] **Step 3: 实现最小发布器和 CLI**
 
 index-build 只接受 hybrid、raptor 与非空 data version，生成候选 collection 引用、执行固定 smoke query、写脱敏 IndexBuildReport，最后原子写入相应 kind 的当前 published ref。任何异常仅记稳定异常类型，不写 URI、token、模型响应或原始文档。在线查询工具不接受 build、publish 或 delete 参数。
 
 tests/live/test_raptor_deepseek.py 在 RUN_LIVE_MODEL != "1" 时 skipped；启用时只发送版本化的短政策 fixture，并报告模型 ID、prompt version、数据版本和提交号，不输出请求/响应全文。
 
-- [ ] **Step 4: 运行 GREEN、L3 回归与可选 live 命令**
+- [x] **Step 4: 运行 GREEN、L3 回归与可选 live 命令**
 
 Run: UV_CACHE_DIR=.uv-cache uv run pytest tests/unit/retrieval/test_index_pipeline.py tests/contract/test_cli_contract.py -q
 
 Run: RUN_MILVUS_INTEGRATION=1 UV_CACHE_DIR=.uv-cache uv run pytest -m integration_milvus -q
 
-Optional, only after explicit user cost approval: RUN_LIVE_MODEL=1 UV_CACHE_DIR=.uv-cache uv run pytest -m live_model tests/live/test_raptor_deepseek.py -q
+Optional, only after explicit user cost approval: RUN_LIVE_MODEL_TESTS=1 UV_CACHE_DIR=.uv-cache uv run pytest -m live_model tests/live/test_raptor_deepseek.py -q
 
 Expected: 默认单元/契约与 L3 PASS；未获成本授权时 live_model 为 skipped，不能记为通过。
 
-- [ ] **Step 5: 更新状态、TDD 记录并提交**
+- [x] **Step 5: 更新状态、TDD 记录并提交**
 
 Update: docs/specs/020-retrieval-and-indexing.md、docs/superpowers/plans/2026-08-31-retrieval-and-indexing.md、docs/tdd/records/m4-index-publication.md。
 

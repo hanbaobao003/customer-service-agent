@@ -1,6 +1,6 @@
 # 检索与索引规格
 
-**状态：** 已批准设计，实施中（M4 Task 2–3 纯函数、Task 4 图与联网边界、Task 5 离线发布状态机已完成；DG-004、DG-005 已于 2026-09-02 批准，等待细化 TDD 计划审阅后进入 Milvus 集成）
+**状态：** 已批准设计，实施中（M4 常规 RAG 与 RAPTOR 的隔离 Milvus L3、发布 alias 边界和 DeepSeek 短摘要 live 验证已完成；真实 BGE embedding/reranker、业务数据导入和在线 tool service 装配仍未实施）
 
 **版本：** 1.1
 
