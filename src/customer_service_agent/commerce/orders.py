@@ -736,6 +736,117 @@ def create_get_order_tool(service: OrderService):
     return get_order
 
 
+def create_order_preview_tools(
+    commands: OrderCommandService,
+    *,
+    approval_id_generator: Callable[[], str],
+):
+    def approval_id() -> str:
+        value = approval_id_generator().strip()
+        if not value:
+            raise ValueError("approval_id_generator returned blank value")
+        return value
+
+    @tool("create_order", response_format="content_and_artifact")
+    async def create_order(
+        items: list[CreateOrderItemRequest],
+        contact_name: str,
+        contact_phone: str,
+        shipping_address: str,
+        runtime: ToolRuntime[RuntimeContext],
+    ) -> tuple[str, dict[str, object]]:
+        """生成创建订单预览，等待用户审批后才会创建订单。"""
+        preview = await commands.preview_create(
+            runtime.context,
+            interrupt_id=approval_id(),
+            request=CreateOrderRequest(
+                items=tuple(items),
+                contact_name=contact_name,
+                contact_phone=contact_phone,
+                shipping_address=shipping_address,
+            ),
+        )
+        return _preview_tool_output(preview)
+
+    @tool("update_order_contact", response_format="content_and_artifact")
+    async def update_order_contact(
+        order_id: str,
+        contact_name: str | None = None,
+        contact_phone: str | None = None,
+        shipping_address: str | None = None,
+        runtime: ToolRuntime[RuntimeContext] = None,
+    ) -> tuple[str, dict[str, object]]:
+        """生成订单联系方式修改预览，等待用户审批后才会修改。"""
+        preview = await commands.preview_update_contact(
+            runtime.context,
+            interrupt_id=approval_id(),
+            request=UpdateOrderContactRequest(
+                order_id=order_id,
+                contact_name=contact_name,
+                contact_phone=contact_phone,
+                shipping_address=shipping_address,
+            ),
+        )
+        return _preview_tool_output(preview)
+
+    @tool("cancel_order", response_format="content_and_artifact")
+    async def cancel_order(
+        order_id: str,
+        reason_code: str,
+        reason_text: str | None = None,
+        runtime: ToolRuntime[RuntimeContext] = None,
+    ) -> tuple[str, dict[str, object]]:
+        """生成取消订单预览，等待用户审批后才会取消。"""
+        preview = await commands.preview_cancel(
+            runtime.context,
+            interrupt_id=approval_id(),
+            request=CancelOrderRequest(
+                order_id=order_id,
+                reason_code=reason_code,
+                reason_text=reason_text,
+            ),
+        )
+        return _preview_tool_output(preview)
+
+    @tool("request_return", response_format="content_and_artifact")
+    async def request_return(
+        order_id: str,
+        reason_code: str,
+        reason_text: str,
+        runtime: ToolRuntime[RuntimeContext] = None,
+    ) -> tuple[str, dict[str, object]]:
+        """生成退货申请预览，等待用户审批后才会提交申请。"""
+        preview = await commands.preview_return(
+            runtime.context,
+            interrupt_id=approval_id(),
+            request=RequestReturnRequest(
+                order_id=order_id,
+                reason_code=reason_code,
+                reason_text=reason_text,
+            ),
+        )
+        return _preview_tool_output(preview)
+
+    return create_order, update_order_contact, cancel_order, request_return
+
+
+def _preview_tool_output(preview: OperationPreview) -> tuple[str, dict[str, object]]:
+    return (
+        json.dumps(
+            {
+                "operation_id": preview.operation_id,
+                "tool_name": preview.tool_name,
+                "status": "approval_required",
+            },
+            ensure_ascii=False,
+        ),
+        {
+            "approval_id": preview.interrupt_id,
+            "operation": preview.model_dump(mode="json"),
+        },
+    )
+
+
 def _mask_name(value: str) -> str:
     return f"{value[:1]}**" if value else "***"
 

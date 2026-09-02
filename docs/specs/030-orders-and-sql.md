@@ -1,6 +1,6 @@
 # 订单与受控 SQL 规格
 
-**状态：** 已实施（Tasks 1–5 已完成）
+**状态：** 领域任务已实施；Agent 预览工具已实施，应用层批准编排进行中
 
 **版本：** 1.0
 
@@ -148,6 +148,16 @@ delivered -> return_requested -> returned -> refunded
 | ORD-IDEM-002 | 相同 operation 的重复批准返回首次执行结果；不得再次写入领域数据。 |
 | ORD-IDEM-003 | 相同业务意图但不同 operation 仍需按当前状态重新校验，不能自动合并。 |
 | ORD-IDEM-004 | 写工具不使用通用自动重试；数据库提交结果不明时先按 operation 查询结果。 |
+
+### 5.3 Agent 两阶段预览适配
+
+为保持首版作品可读且不绕过已有订单状态机，四个订单写工具采用两阶段适配：
+
+1. Agent 调用 `create_order`、`update_order_contact`、`cancel_order` 或 `request_return` 时，只调用领域 `preview_*`，保存带哈希的 operation；
+2. 工具的模型可见内容仅返回 `operation_id`、`tool_name` 和 `approval_required`；完整规范化参数、approval ID 与哈希仅在 artifact/数据库；
+3. 应用层收到用户批准后，以 operation ID 调用已有 `OperationService.execute_approved`，不让模型重放原始写参数；拒绝使用同一 operation 的 reject 路径。
+
+该适配不把四个“预览工具”再交给 LangChain `HumanInTheLoopMiddleware`，否则工具会在生成 operation 前被拦截而无法形成可校验预览。首版当前已实现第 1–2 步和领域执行服务；API/SSE 的 operation approval 编排仍属于 M5 未完成边界。
 
 ## 6. 客户隔离
 
