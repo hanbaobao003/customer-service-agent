@@ -159,6 +159,8 @@ FastAPI + SSE ─────┘          │                  │
 | DG-007 | LangSmith 裁判模型和成本预算 | 运行 LLM 裁判前 | 只运行确定性评测 |
 | DG-008 | 新账号、密钥、付费服务或外部数据 | 首次需要该资源前 | 停止相关任务并向用户请求支持 |
 
+DG-002 已于 2026-09-02 批准：Agent 模型为 `deepseek-v4-flash`。实现与验证边界见 [M5 Agent 模型与检查点决策](../decisions/003-m5-agent-model-and-checkpoint.md)。
+
 ## 9. 规格变更流程
 
 1. 行为变化必须先修改对应需求 ID 和 Given/When/Then 场景。

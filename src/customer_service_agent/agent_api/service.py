@@ -2,6 +2,7 @@
 
 import asyncio
 import string
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -9,9 +10,16 @@ from pathlib import Path
 from typing import Any, AsyncContextManager, Protocol
 
 import yaml
+from langchain.agents import create_agent
+from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.types import Command
 
+from customer_service_agent.agent_api.middleware import GovernanceMiddleware, RunLimits, WRITE_TOOL_NAMES
 from customer_service_agent.shared.errors import ServiceError
-from customer_service_agent.shared.models import AppEvent, RuntimeContext
+from customer_service_agent.shared.models import AppEvent, EventSequencer, EventType, RuntimeContext
 
 
 class ThreadBindingRepository(Protocol):
@@ -38,6 +46,188 @@ class AgentRunner(Protocol):
         decision: str,
         reason: str | None,
     ) -> AsyncIterator[AppEvent]: ...
+
+
+class PostgresRuntimeAdapter:
+    def __init__(self, dsn: str) -> None:
+        if not dsn.strip():
+            raise ValueError("PostgreSQL checkpoint DSN must not be blank")
+        self._dsn = dsn
+
+    @asynccontextmanager
+    async def checkpointer(self) -> AsyncIterator[object]:
+        async with AsyncPostgresSaver.from_conn_string(self._dsn) as saver:
+            await saver.setup()
+            yield saver
+
+
+class LangGraphAgentRunner:
+    """Adapts compiled LangGraph updates to the public application event contract."""
+
+    def __init__(self, agent: object) -> None:
+        self._agent = agent
+
+    async def stream(
+        self,
+        *,
+        context: RuntimeContext,
+        message: str,
+    ) -> AsyncIterator[AppEvent]:
+        async for event in self._stream_events(
+            {"messages": [HumanMessage(content=message)]},
+            context,
+        ):
+            yield event
+
+    async def resume(
+        self,
+        *,
+        context: RuntimeContext,
+        interrupt_id: str,
+        decision: str,
+        reason: str | None,
+    ) -> AsyncIterator[AppEvent]:
+        config = {"configurable": {"thread_id": context.thread_id}}
+        state = await self._agent.aget_state(config)
+        pending_interrupt_ids = {
+            interrupt.id
+            for task in state.tasks
+            for interrupt in task.interrupts
+        }
+        if interrupt_id not in pending_interrupt_ids:
+            raise ValueError("interrupt does not belong to the pending thread state")
+        async for event in self._stream_events(
+            build_hitl_resume(decision=decision, reason=reason),
+            context,
+        ):
+            yield event
+
+    async def _stream_events(
+        self,
+        agent_input: object,
+        context: RuntimeContext,
+    ) -> AsyncIterator[AppEvent]:
+        sequencer = EventSequencer(
+            thread_id=context.thread_id,
+            request_id=context.request_id,
+        )
+        started_at: dict[str, tuple[str, float]] = {}
+        stream = self._agent.astream(
+            agent_input,
+            config={"configurable": {"thread_id": context.thread_id}},
+            stream_mode="updates",
+        )
+        async for update in stream:
+            for event in self._events_from_update(update, sequencer, started_at):
+                yield event
+
+    @staticmethod
+    def _events_from_update(
+        update: object,
+        sequencer: EventSequencer,
+        started_at: dict[str, tuple[str, float]],
+    ) -> tuple[AppEvent, ...]:
+        if not isinstance(update, dict):
+            return ()
+
+        events: list[AppEvent] = []
+        for node_output in update.values():
+            if not isinstance(node_output, dict):
+                continue
+            messages = node_output.get("messages")
+            if not isinstance(messages, list):
+                continue
+            for item in messages:
+                if isinstance(item, AIMessage):
+                    for tool_call in item.tool_calls:
+                        tool_call_id = str(tool_call["id"])
+                        started_at[tool_call_id] = (str(tool_call["name"]), time.monotonic())
+                        events.append(
+                            sequencer.emit(
+                                EventType.TOOL_STARTED,
+                                {
+                                    "tool_call_id": tool_call_id,
+                                    "tool_name": str(tool_call["name"]),
+                                },
+                            )
+                        )
+                    if not item.tool_calls and isinstance(item.content, str) and item.content:
+                        events.append(sequencer.emit(EventType.MESSAGE_DELTA, {"text": item.content}))
+                        events.append(
+                            sequencer.emit(
+                                EventType.MESSAGE_COMPLETED,
+                                {
+                                    "message": item.content,
+                                    "citations": [],
+                                    "usage_summary": {},
+                                },
+                            )
+                        )
+                elif isinstance(item, ToolMessage):
+                    _, started = started_at.pop(item.tool_call_id, (item.name, time.monotonic()))
+                    events.append(
+                        sequencer.emit(
+                            EventType.TOOL_COMPLETED,
+                            {
+                                "tool_call_id": item.tool_call_id,
+                                "tool_name": item.name,
+                                "status": item.status,
+                                "duration_ms": round((time.monotonic() - started) * 1_000),
+                            },
+                        )
+                    )
+        interrupts = update.get("__interrupt__")
+        if isinstance(interrupts, tuple):
+            for interrupt in interrupts:
+                events.extend(
+                    LangGraphAgentRunner._approval_events(
+                        interrupt,
+                        sequencer,
+                        started_at,
+                    )
+                )
+        return tuple(events)
+
+    @staticmethod
+    def _approval_events(
+        interrupt: object,
+        sequencer: EventSequencer,
+        started_at: dict[str, tuple[str, float]],
+    ) -> tuple[AppEvent, ...]:
+        value = getattr(interrupt, "value", None)
+        interrupt_id = getattr(interrupt, "id", None)
+        if not isinstance(value, dict) or not isinstance(interrupt_id, str):
+            return ()
+        action_requests = value.get("action_requests")
+        if not isinstance(action_requests, list):
+            return ()
+
+        events: list[AppEvent] = []
+        for action in action_requests:
+            if not isinstance(action, dict) or not isinstance(action.get("name"), str):
+                continue
+            tool_name = action["name"]
+            operation_id = next(
+                (
+                    tool_call_id
+                    for tool_call_id, (started_name, _) in started_at.items()
+                    if started_name == tool_name
+                ),
+                "",
+            )
+            events.append(
+                sequencer.emit(
+                    EventType.APPROVAL_REQUIRED,
+                    {
+                        "interrupt_id": interrupt_id,
+                        "operation_id": operation_id,
+                        "tool_name": tool_name,
+                        "preview": {},
+                        "allowed_decisions": ["approve", "reject"],
+                    },
+                )
+            )
+        return tuple(events)
 
 
 class _ThreadCustomerMismatch(Exception):
@@ -135,6 +325,58 @@ def build_agent_prompt(
         trusted_context=f"服务渠道：{context.channel}；语言：{context.locale}。",
         tool_policy=tool_policy,
     )
+
+
+def build_customer_service_agent(
+    *,
+    model: object,
+    tools: tuple[object, ...],
+    checkpointer: object,
+    system_prompt: str,
+    middleware: tuple[object, ...],
+) -> object:
+    return create_agent(
+        model=model,
+        tools=tools,
+        checkpointer=checkpointer,
+        system_prompt=system_prompt,
+        middleware=middleware,
+        name="customer_service_agent",
+    )
+
+
+def build_deepseek_agent_model(*, api_key: str, base_url: str) -> ChatOpenAI:
+    if not api_key.strip() or not base_url.strip():
+        raise ValueError("DeepSeek agent credentials must not be blank")
+    return ChatOpenAI(
+        model="deepseek-v4-flash",
+        api_key=api_key,
+        base_url=base_url,
+        temperature=0,
+    )
+
+
+def build_agent_middleware(
+    *,
+    limits: RunLimits,
+    max_read_retries: int,
+) -> tuple[object, ...]:
+    return (
+        GovernanceMiddleware(limits=limits, max_read_retries=max_read_retries),
+        HumanInTheLoopMiddleware(
+            interrupt_on={name: True for name in WRITE_TOOL_NAMES},
+        ),
+    )
+
+
+def build_hitl_resume(*, decision: str, reason: str | None) -> Command:
+    if decision == "approve":
+        resume_decision: dict[str, str] = {"type": "approve"}
+    elif decision == "reject" and reason and reason.strip():
+        resume_decision = {"type": "reject", "message": reason.strip()}
+    else:
+        raise ValueError("invalid HITL decision")
+    return Command(resume={"decisions": [resume_decision]})
 
 
 def _validate_prompt_payload(payload: object) -> dict[str, str]:
