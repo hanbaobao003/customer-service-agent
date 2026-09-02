@@ -36,13 +36,20 @@ uv run pytest -m integration_postgres -q
 uv run ruff check src tests
 ```
 
-真实模型测试默认关闭。获得授权并配置本地环境变量后才运行：
+作品集版 M6 另提供 6 条固定场景的离线工具路由评测：
 
 ```bash
-RUN_LIVE_MODEL_TESTS=1 uv run pytest -m live_model -q
+uv run pytest tests/unit/quality/test_portfolio_eval.py -q
 ```
 
-测试不读取或输出 API Key、数据库密码或 `.env` 内容。
+真实模型与 LangSmith 测试默认关闭。获得授权并在当前终端配置 `LANGSMITH_API_KEY`、`Deepseek_API_KEY`、`Deepseek_BASE_URL` 后才运行：
+
+```bash
+RUN_LIVE_LANGSMITH_TESTS=1 RUN_LIVE_MODEL_TESTS=1 \
+  uv run pytest tests/live/test_langsmith_portfolio_eval.py -q
+```
+
+该命令会在 `wang-agent-portfolio` LangSmith 项目中创建或复用 `wang-agent-portfolio-v1` 数据集、创建一次评测 experiment，并记录一次真实 DeepSeek 工具调用 trace。测试不读取或输出 API Key、数据库密码或 `.env` 内容。
 
 ## 推荐的面试演示顺序
 
@@ -56,6 +63,8 @@ RUN_LIVE_MODEL_TESTS=1 uv run pytest -m live_model -q
 
 已验证：领域状态机、订单预览、受控 SQL、Mem0 PGVector、三类检索索引、单 Agent 工厂、预算/重试、可信 runtime-context、PostgreSQL HITL 恢复与 DeepSeek 工具调用。
 
-仍在实现：订单 operation approval 的 API/SSE 编排、会话摘要、持久化审计、全工具生产组装和 LangSmith 评测集。项目不会把这些未完成项描述为生产就绪能力。
+已实现（作品集 M6）：六条离线确定性评测、LangSmith 数据集/experiment 适配与 opt-in 的真实 trace 验证。当前环境尚未完成该 live 验证时，测试会明确显示 skipped。
+
+不纳入当前作品集范围：订单 operation approval 的 API/SSE 编排、会话摘要、持久化审计、全工具生产组装、60 条门槛集与 LLM 裁判。项目不会把这些未完成项描述为生产就绪能力。
 
 详细规格见 [docs/specs](docs/specs)，TDD 证据见 [docs/tdd/records](docs/tdd/records)。

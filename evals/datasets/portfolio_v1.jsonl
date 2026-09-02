@@ -1,0 +1,6 @@
+{"case_id":"ROUTE-001","group":"route","message":"查询订单状态","expected_tool":"get_order"}
+{"case_id":"RAG-HYBRID-001","group":"rag_hybrid","message":"商品保修多久？","expected_tool":"search_product_faq"}
+{"case_id":"RAG-RAPTOR-001","group":"rag_raptor","message":"退货政策的总体条件是什么？","expected_tool":"search_policy_raptor"}
+{"case_id":"RAG-GRAPH-001","group":"rag_graph","message":"这个品牌有哪些相关配件？","expected_tool":"search_commerce_graph"}
+{"case_id":"SQL-001","group":"sql","message":"我本月订单金额是多少？","expected_tool":"query_business_data"}
+{"case_id":"ORDER-001","group":"order","message":"取消未发货订单","expected_tool":"cancel_order"}

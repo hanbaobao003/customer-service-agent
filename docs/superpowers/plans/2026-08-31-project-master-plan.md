@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to execute this roadmap milestone by milestone. Entering a feature task also requires `superpowers:test-driven-development`; the five child plans remain the source of exact RED→GREEN steps.
 
-**状态：** 已批准，M0–M4 已完成；M5 进行中（Agent 工厂、持久 HITL、预算、有限重试、可信 runtime-context 已完成，摘要与 decision 幂等待完成）
+**状态：** 已批准，M0–M4 已完成；M5 核心演示链路完成、生产增强项不纳入作品集范围；M6 按作品集最小验证档案实施中。
 
 **版本：** 1.0
 
@@ -156,7 +156,7 @@ DG-001 的批准版本记录在 [M0 运行时与 Docker 兼容性基线](../../d
 
 已完成：单 `create_agent` 工厂、`deepseek-v4-flash` 的真实工具调用验证、异步模型/工具预算、有限暂时性重试、持久 HITL 暂停/恢复、PostgreSQL saver 重建恢复、可信 `RuntimeContext` 向工具 runtime 传递。
 
-未完成：受控会话摘要、独立审计中间件、重复 decision 的持久幂等结果、完整 API HTTP 错误映射，以及全工具实际组装与路由验证。
+不纳入作品集范围：受控会话摘要、独立审计中间件、重复 decision 的持久幂等结果、完整 API HTTP 错误映射，以及全工具实际组装与路由验证。它们是生产化增强，不影响现有受控演示链路；未实现时不得声称生产就绪。
 
 **前置：** M2 完成；M3、M4 提供稳定工具接口；DG-002 在真实模型工厂前获批。
 
@@ -175,6 +175,8 @@ DG-001 的批准版本记录在 [M0 运行时与 Docker 兼容性基线](../../d
 - scripted model、PostgreSQL 恢复和真实模型验证边界分别报告。
 
 ### M6：评测、可观测性与发布门禁
+
+**状态：** 作品集最小验证档案实施中（2026-09-03）。完整 60 条质量门禁与 LLM 裁判不纳入当前简历版本。
 
 **前置：** M3～M5 的可用能力已明确；缺失的外部服务可以形成单独阻塞报告，但不能被记为通过。
 
