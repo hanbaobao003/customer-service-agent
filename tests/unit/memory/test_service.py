@@ -4,7 +4,6 @@ import pytest
 
 from customer_service_agent.memory.service import (
     DeleteResult,
-    MemoryAuditPort,
     MemoryKind,
     MemoryPolicy,
     MemoryPolicyError,
