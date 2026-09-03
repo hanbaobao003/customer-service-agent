@@ -130,12 +130,13 @@ def _nonblank_lines(lines: Iterable[str]) -> Iterable[str]:
 
 
 def score_selected_tool(
-    _inputs: dict[str, Any],
+    inputs: dict[str, Any],
     outputs: dict[str, Any],
     reference_outputs: dict[str, Any],
 ) -> dict[str, object]:
     """Score whether the observed tool equals the case's expected tool."""
 
+    del inputs
     return {
         "key": "tool_route",
         "score": int(outputs.get("selected_tool") == reference_outputs.get("expected_tool")),

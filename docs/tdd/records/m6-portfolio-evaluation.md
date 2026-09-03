@@ -20,6 +20,13 @@
 
 ## 4. 验证边界
 
-- 本地：`230 passed, 20 deselected`（unit/contract），`ruff check src tests` 和 `git diff --check` 通过。
-- Live：`RUN_LIVE_LANGSMITH_TESTS=1 RUN_LIVE_MODEL_TESTS=1` 已执行；当前进程缺少 LangSmith 或 DeepSeek 配置，按设计 `skipped`，没有把它记为通过。
+- 本地：`231 passed, 20 deselected`（unit/contract），`ruff check src tests` 和 `git diff --check` 通过。
+- Docker：PostgreSQL、Milvus、Neo4j 完整回归与本地测试合计 `248 passed, 3 deselected`。
+- Live：使用 `.env` 执行 `RUN_LIVE_LANGSMITH_TESTS=1 RUN_LIVE_MODEL_TESTS=1`，真实 LangSmith 测试通过；DeepSeek live_model 为 `2 passed, 1 skipped`，跳过项未开启 LangSmith 开关时按设计跳过。
 - live 测试在配置齐备时只上传六条模拟样本，并复用真实 DeepSeek `echo_test` 工具调用生成 trace；不上传密钥、真实客户数据或 chain-of-thought。
+
+## 5. LangSmith evaluator 参数兼容性修复
+
+- **真实 RED：** 启用 `.env` 后，`test_langsmith_records_portfolio_experiment_and_model_trace` 在 LangSmith 注册 evaluator 时失败；SDK 报告 `_inputs` 不是受支持的参数名。
+- **最小本地 RED：** 新增签名测试，断言参数依次为 `inputs`、`outputs`、`reference_outputs`；修复前第一项为 `_inputs`，断言失败。
+- **GREEN：** 仅将参数改为 `inputs`，保持评分逻辑不变；本地 M6 5 项测试通过，真实 LangSmith live 测试通过。

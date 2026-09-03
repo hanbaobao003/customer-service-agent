@@ -1,3 +1,4 @@
+import inspect
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,15 @@ def test_score_selected_tool_marks_expected_tool_as_passed() -> None:
         {"selected_tool": "get_order"},
         {"expected_tool": "get_order"},
     ) == {"key": "tool_route", "score": 1}
+
+
+@pytest.mark.unit
+def test_score_selected_tool_uses_langsmith_supported_parameter_names() -> None:
+    assert tuple(inspect.signature(score_selected_tool).parameters) == (
+        "inputs",
+        "outputs",
+        "reference_outputs",
+    )
 
 
 @pytest.mark.unit
