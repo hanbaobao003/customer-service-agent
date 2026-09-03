@@ -51,6 +51,16 @@ RUN_LIVE_LANGSMITH_TESTS=1 RUN_LIVE_MODEL_TESTS=1 \
 
 该命令会在 `wang-agent-portfolio` LangSmith 项目中创建或复用 `wang-agent-portfolio-v1` 数据集、创建一次评测 experiment，并记录一次真实 DeepSeek 工具调用 trace。测试不读取或输出 API Key、数据库密码或 `.env` 内容。
 
+## 本地手工演示
+
+无需 Docker、`.env` 或模型即可启动一个确定性 mock Agent：
+
+```bash
+uv run uvicorn customer_service_agent.demo:app --app-dir src --reload --port 8000
+```
+
+它通过 SSE 展示订单查询、FAQ 引用和取消订单的 HITL 批准恢复。完整请求与 mock 数据见 [本地 Demo 验收手册](docs/demo.md)。
+
 ## 推荐的面试演示顺序
 
 1. 展示 `RuntimeContext` 如何阻止模型伪造客户身份。
