@@ -3,6 +3,7 @@
 .idea/
 .venv/
 .uv-cache/
+.worktrees/
 __pycache__/
 *.py[cod]
 .pytest_cache/
