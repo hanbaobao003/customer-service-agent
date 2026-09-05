@@ -1,12 +1,14 @@
 """Long-term memory policy and application contracts."""
 
 import re
+import json
 from collections.abc import Sequence
 from collections.abc import Callable
 from datetime import datetime
 from enum import StrEnum
 from typing import Literal, Protocol
 
+from langchain.tools import ToolRuntime, tool
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from customer_service_agent.shared.models import RuntimeContext
@@ -424,6 +426,71 @@ class MemoryService:
             result="deleted" if result.deleted else "not_found",
         )
         return result
+
+
+def create_memory_tools(service: MemoryService):
+    @tool("remember_preference", response_format="content_and_artifact")
+    async def remember_preference(
+        content: str,
+        category: str,
+        runtime: ToolRuntime[RuntimeContext],
+    ) -> tuple[str, dict[str, object]]:
+        """保存用户明确要求长期记住的非敏感偏好。"""
+        summary = await service.remember(
+            runtime.context,
+            user_message=_latest_human_message(runtime.state),
+            request=RememberMemoryRequest(
+                kind=MemoryKind.PREFERENCE,
+                content=content,
+                category=category,
+            ),
+        )
+        payload = summary.model_dump(mode="json")
+        return json.dumps(payload, ensure_ascii=False), payload
+
+    @tool("list_memories", response_format="content_and_artifact")
+    async def list_memories(
+        category: str | None = None,
+        runtime: ToolRuntime[RuntimeContext] = None,
+    ) -> tuple[str, dict[str, object]]:
+        """查看当前客户保存的长期记忆。"""
+        summaries = await service.list(runtime.context, category=category)
+        payload = [item.model_dump(mode="json") for item in summaries]
+        return json.dumps(payload, ensure_ascii=False), {"memories": payload}
+
+    @tool("forget_memory", response_format="content_and_artifact")
+    async def forget_memory(
+        memory_id: str,
+        runtime: ToolRuntime[RuntimeContext] = None,
+    ) -> tuple[str, dict[str, object]]:
+        """删除用户明确要求忘记的一条长期记忆。"""
+        result = await service.forget(
+            runtime.context,
+            user_message=_latest_human_message(runtime.state),
+            memory_id=memory_id,
+        )
+        payload = result.model_dump(mode="json")
+        return json.dumps(payload, ensure_ascii=False), payload
+
+    return remember_preference, list_memories, forget_memory
+
+
+def _latest_human_message(state: object) -> str:
+    if not isinstance(state, dict):
+        return ""
+    messages = state.get("messages")
+    if not isinstance(messages, list):
+        return ""
+    for message in reversed(messages):
+        if isinstance(message, dict):
+            if message.get("type") == "human" and isinstance(message.get("content"), str):
+                return message["content"]
+            continue
+        message_type = getattr(message, "type", None)
+        content = getattr(message, "content", None)
+        if message_type == "human" and isinstance(content, str):
+            return content
+    return ""
 
 
 def _normalize_fact(content: str) -> str:

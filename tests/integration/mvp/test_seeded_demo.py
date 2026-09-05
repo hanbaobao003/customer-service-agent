@@ -12,6 +12,7 @@ from customer_service_agent.mvp.seed import (
     seed_neo4j,
     seed_postgres,
 )
+from customer_service_agent.mvp.services import build_mvp_retrieval_service
 from customer_service_agent.mvp.settings import MvpSettings
 
 
@@ -135,3 +136,22 @@ async def test_seed_mvp_populates_all_demo_resources(tmp_path) -> None:
     assert report.raptor_collection == "wang_agent_mvp_raptor_v1"
     assert report.graph_version == "wang_agent_mvp_v1"
     assert report.memory_count == 1
+
+
+@pytest.mark.integration_milvus
+@pytest.mark.integration_neo4j
+@pytest.mark.asyncio
+async def test_seeded_retrieval_services_return_cited_evidence() -> None:
+    settings = MvpSettings.from_environment({**os.environ})
+    service = build_mvp_retrieval_service(settings)
+
+    faq = await service.search_product_faq("耳机保修多久")
+    policy = await service.search_policy_raptor("已付款订单可以取消吗")
+    graph = await service.search_commerce_graph("耳机是什么品牌")
+
+    assert faq.answerable is True
+    assert faq.citations[0].id == "mvp-faq-warranty#warranty"
+    assert policy.answerable is True
+    assert policy.citations[0].id == "mvp-policy-return#section-cancel"
+    assert graph.answerable is True
+    assert graph.citations[0].id == "mvp-graph#MVP-PRODUCT-1001"
