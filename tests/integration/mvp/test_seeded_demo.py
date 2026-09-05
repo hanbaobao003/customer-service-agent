@@ -12,7 +12,7 @@ from customer_service_agent.mvp.seed import (
     seed_neo4j,
     seed_postgres,
 )
-from customer_service_agent.mvp.services import build_mvp_retrieval_service
+from customer_service_agent.mvp.services import MvpProductCatalog, build_mvp_retrieval_service
 from customer_service_agent.mvp.settings import MvpSettings
 
 
@@ -155,3 +155,15 @@ async def test_seeded_retrieval_services_return_cited_evidence() -> None:
     assert policy.citations[0].id == "mvp-policy-return#section-cancel"
     assert graph.answerable is True
     assert graph.citations[0].id == "mvp-graph#MVP-PRODUCT-1001"
+
+
+@pytest.mark.integration_postgres
+@pytest.mark.asyncio
+async def test_seeded_catalog_reads_active_product_snapshot() -> None:
+    settings = MvpSettings.from_environment({**os.environ})
+
+    product = await MvpProductCatalog(settings.postgres_dsn).get("MVP-PRODUCT-1001")
+
+    assert product is not None
+    assert product.product_name == "云端降噪耳机"
+    assert str(product.unit_price) == "399.00"

@@ -1,8 +1,22 @@
 """Concrete, minimal services used by the local portfolio MVP."""
 
-from decimal import Decimal
 import json
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import uuid4
 
+import psycopg
+from psycopg.rows import dict_row
+from customer_service_agent.commerce.orders import (
+    OperationService,
+    OrderCommandService,
+    OrderService,
+    ProductSnapshot,
+    create_get_order_tool,
+    create_order_preview_tools,
+)
+from customer_service_agent.commerce.postgres import PostgresCommerceStore
 from customer_service_agent.commerce.postgres import PostgresSqlReader
 from customer_service_agent.commerce.sql import (
     ProposedSql,
@@ -294,4 +308,66 @@ def build_mvp_retrieval_service(settings: object) -> MvpRetrievalService:
             data_version=resources.graph_version,
         ),
         graph_version=resources.graph_version,
+    )
+
+
+class MvpProductCatalog:
+    """Read active products from the seeded PostgreSQL catalog."""
+
+    def __init__(self, postgres_dsn: str) -> None:
+        self._postgres_dsn = postgres_dsn
+
+    async def get(self, product_id: str) -> ProductSnapshot | None:
+        async with await psycopg.AsyncConnection.connect(
+            self._postgres_dsn,
+            row_factory=dict_row,
+        ) as connection:
+            cursor = await connection.execute(
+                """
+                SELECT product_id, product_name, unit_price, currency, active
+                FROM catalog_products_data
+                WHERE product_id = %s
+                """,
+                (product_id,),
+            )
+            row = await cursor.fetchone()
+        if row is None:
+            return None
+        return ProductSnapshot(
+            product_id=str(row["product_id"]),
+            product_name=str(row["product_name"]),
+            unit_price=Decimal(str(row["unit_price"])),
+            currency=str(row["currency"]),
+            active=bool(row["active"]),
+        )
+
+
+@dataclass(frozen=True)
+class MvpOrderToolBundle:
+    tools: tuple[object, ...]
+    operations: OperationService
+    commands: OrderCommandService
+
+
+def build_mvp_order_tools(settings: object) -> MvpOrderToolBundle:
+    store = PostgresCommerceStore(getattr(settings, "postgres_dsn"))
+    operations = OperationService(store=store, id_generator=lambda: str(uuid4()))
+    commands = OrderCommandService(
+        repo=store,
+        catalog=MvpProductCatalog(getattr(settings, "postgres_dsn")),
+        operations=operations,
+        clock=lambda: datetime.now(UTC),
+        order_id_generator=lambda: f"MVP-ORDER-{uuid4().hex[:8].upper()}",
+        return_id_generator=lambda: f"MVP-RETURN-{uuid4().hex[:8].upper()}",
+    )
+    return MvpOrderToolBundle(
+        tools=(
+            create_get_order_tool(OrderService(repo=store, clock=lambda: datetime.now(UTC))),
+            *create_order_preview_tools(
+                commands,
+                approval_id_generator=lambda: str(uuid4()),
+            ),
+        ),
+        operations=operations,
+        commands=commands,
     )

@@ -2,7 +2,11 @@ from decimal import Decimal
 
 import pytest
 
-from customer_service_agent.mvp.services import MvpRetrievalService, MvpSqlGenerator
+from customer_service_agent.mvp.services import (
+    MvpRetrievalService,
+    MvpSqlGenerator,
+    build_mvp_order_tools,
+)
 from customer_service_agent.retrieval.hybrid import ParentDocument, SearchHit
 from customer_service_agent.retrieval.graph import GraphQueryResult
 from customer_service_agent.retrieval.raptor import RaptorHit, RaptorNode
@@ -170,3 +174,18 @@ async def test_sql_generator_maps_order_count_to_a_fixed_read_query() -> None:
 
     assert proposal.sql == "SELECT COUNT(order_id) AS order_count FROM customer_orders"
     assert proposal.referenced_relations == ("customer_orders",)
+
+
+@pytest.mark.unit
+def test_order_tool_bundle_exposes_one_read_and_four_preview_tools() -> None:
+    settings = type("Settings", (), {"postgres_dsn": "postgresql://demo"})()
+
+    bundle = build_mvp_order_tools(settings)
+
+    assert {tool.name for tool in bundle.tools} == {
+        "get_order",
+        "create_order",
+        "update_order_contact",
+        "cancel_order",
+        "request_return",
+    }
