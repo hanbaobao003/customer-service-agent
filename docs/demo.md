@@ -1,6 +1,35 @@
 # 本地 Demo 验收手册
 
-这个 Demo 用确定性 mock Agent 展示已有的 FastAPI、SSE、可信运行时上下文、工具事件、引用和 HITL 恢复契约。它不读取 `.env`、不连接 Docker、不会调用模型或写入真实订单。
+本项目有两种演示：真实 MVP 浏览器版用于作品集展示；确定性 mock Agent 用于离线 SSE 契约验证。两者的接口一致，但数据源和副作用不同。
+
+## 真实 MVP 浏览器版
+
+在项目 worktree 中执行：
+
+```bash
+PYTHONPATH=src uv run --env-file /Users/danny/Documents/wang-agent/.env \
+  python -m customer_service_agent.mvp.seed
+PYTHONPATH=src uv run --env-file /Users/danny/Documents/wang-agent/.env \
+  python -m uvicorn customer_service_agent.mvp.app:create_mvp_app_from_environment \
+  --factory --host 127.0.0.1 --port 8001
+```
+
+在浏览器打开 `http://127.0.0.1:8001/`，选择“客户 A”，依次输入：
+
+| 输入 | 展示能力 |
+|---|---|
+| `云端降噪耳机保修多久？` | DeepSeek → `search_product_faq` → Milvus 混合检索与引用。 |
+| `已付款订单可以取消吗？` | `search_policy_raptor` → RAPTOR 政策证据。 |
+| `耳机是什么品牌？` | `search_commerce_graph` → Neo4j 商品关系。 |
+| `我的订单有多少个？` | `query_business_data` → 受控只读 SQL。 |
+| `查询订单 MVP-ORDER-1001` | `get_order` → 客户范围订单查询。 |
+| `取消订单 MVP-ORDER-1001，原因是不想要了` | `cancel_order` 预览 → 页面确认 → PostgreSQL 幂等执行。 |
+| `请长期记住我偏好简洁中文回答` | `remember_preference` → 本地 Mem0 PGVector。 |
+| `查看我的记忆` | `list_memories` → 客户隔离的记忆列表。 |
+
+订单写操作只会先显示确认按钮；未确认不会改变订单。为重复演示取消订单，可重新执行 seed 或改用创建订单、修改收货信息、退货申请场景。
+
+## 确定性 mock 演示
 
 ## 启动
 

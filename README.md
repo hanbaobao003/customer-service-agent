@@ -53,6 +53,34 @@ RUN_LIVE_LANGSMITH_TESTS=1 RUN_LIVE_MODEL_TESTS=1 \
 
 ## 本地手工演示
 
+### 真实 MVP 浏览器演示
+
+先在 Docker 服务已启动、根目录 `.env` 已配置的终端执行一次幂等 seed：
+
+```bash
+cd /Users/danny/Documents/wang-agent/.worktrees/mvp-complete
+PYTHONPATH=src uv run --env-file /Users/danny/Documents/wang-agent/.env \
+  python -m customer_service_agent.mvp.seed
+```
+
+启动真实 DeepSeek MVP：
+
+```bash
+PYTHONPATH=src uv run --env-file /Users/danny/Documents/wang-agent/.env \
+  python -m uvicorn customer_service_agent.mvp.app:create_mvp_app_from_environment \
+  --factory --host 127.0.0.1 --port 8001
+```
+
+打开 `http://127.0.0.1:8001/`。页面展示对话、工具调用、引用及订单审批按钮；演示用例和固定 mock 数据见 [本地 Demo 验收手册](docs/demo.md)。实时模型验收可执行：
+
+```bash
+RUN_LIVE_MODEL_TESTS=1 PYTHONPATH=src \
+  uv run --env-file /Users/danny/Documents/wang-agent/.env \
+  pytest tests/live/test_mvp_deepseek.py -q -rs
+```
+
+### 离线 mock 演示
+
 无需 Docker、`.env` 或模型即可启动一个确定性 mock Agent：
 
 ```bash
@@ -71,10 +99,10 @@ uv run uvicorn customer_service_agent.demo:app --app-dir src --reload --port 800
 
 ## 当前范围
 
-已验证：领域状态机、订单预览、受控 SQL、Mem0 PGVector、三类检索索引、单 Agent 工厂、预算/重试、可信 runtime-context、PostgreSQL HITL 恢复与 DeepSeek 工具调用。
+已验证：领域状态机、订单预览、受控 SQL、Mem0 PGVector、三类检索索引、单 Agent 工厂、并发工具预算、可信 runtime-context、PostgreSQL checkpoint 与真实 DeepSeek FAQ 工具调用。
 
 已实现（作品集 M6）：六条离线确定性评测、LangSmith 数据集/experiment 适配与 opt-in 的真实 trace 验证。当前环境尚未完成该 live 验证时，测试会明确显示 skipped。
 
-不纳入当前作品集范围：订单 operation approval 的 API/SSE 编排、会话摘要、持久化审计、全工具生产组装、60 条门槛集与 LLM 裁判。项目不会把这些未完成项描述为生产就绪能力。
+不纳入当前作品集范围：生产身份认证、支付、会话摘要、完整持久化审计、60 条门槛集、LLM 裁判、生产部署与容量治理。项目不会把 MVP 描述为生产就绪能力。
 
 详细规格见 [docs/specs](docs/specs)，TDD 证据见 [docs/tdd/records](docs/tdd/records)。
