@@ -641,6 +641,28 @@ class OperationService:
         return dict(_canonical_json_object(result))
 
 
+class OrderApprovalCoordinator:
+    """Run persisted order previews through the single approved execution path."""
+
+    def __init__(self, *, operations: OperationService, commands: OrderCommandService) -> None:
+        self._operations = operations
+        self._commands = commands
+
+    async def execute_approved(
+        self,
+        context: RuntimeContext,
+        *,
+        operation_id: str,
+        decision: Literal["approve", "reject"],
+    ) -> dict[str, object] | None:
+        return await self._operations.execute_approved(
+            context,
+            operation_id=operation_id,
+            decision=decision,
+            executor=self._commands.execute,
+        )
+
+
 def _canonical_json_object(value: dict[str, object]) -> dict[str, object]:
     encoded = json.dumps(
         value,
