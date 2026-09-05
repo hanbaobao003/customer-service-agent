@@ -13,7 +13,7 @@ from langchain.agents.middleware import (
     ToolCallRequest,
 )
 from langchain.agents.middleware.types import PrivateStateAttr
-from langchain.messages import ToolMessage
+from langchain.messages import AIMessage, ToolMessage
 from langgraph.types import Command
 from typing_extensions import NotRequired
 
@@ -101,9 +101,6 @@ class GovernanceMiddleware(AgentMiddleware):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
     ) -> ToolMessage | Command:
-        calls = int(request.state.get("governance_tool_calls", 0))
-        if calls >= self._limits.tool_calls:
-            raise ToolBudgetExceeded("tool call budget exceeded")
         tool_name = str(request.tool_call["name"])
         retries_remaining = (
             0 if tool_name in WRITE_TOOL_NAMES else self._max_read_retries
@@ -115,7 +112,6 @@ class GovernanceMiddleware(AgentMiddleware):
                     return Command(
                         update={
                             "messages": [result],
-                            "governance_tool_calls": calls + 1,
                         }
                     )
                 return result
@@ -123,6 +119,25 @@ class GovernanceMiddleware(AgentMiddleware):
                 if retries_remaining == 0 or not _is_transient(error):
                     raise
                 retries_remaining -= 1
+
+    async def aafter_model(
+        self,
+        state: GovernanceState,
+        runtime: object,
+    ) -> dict[str, int] | None:
+        del runtime
+        messages = state.get("messages", [])
+        last_message = next(
+            (message for message in reversed(messages) if isinstance(message, AIMessage)),
+            None,
+        )
+        if last_message is None or not last_message.tool_calls:
+            return None
+        calls = int(state.get("governance_tool_calls", 0))
+        total = calls + len(last_message.tool_calls)
+        if total > self._limits.tool_calls:
+            raise ToolBudgetExceeded("tool call budget exceeded")
+        return {"governance_tool_calls": total}
 
 
 class RuntimeAuthorizationMiddleware(AgentMiddleware):

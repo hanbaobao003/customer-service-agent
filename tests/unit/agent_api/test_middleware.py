@@ -51,7 +51,6 @@ async def test_async_middleware_awaits_handler_and_returns_result() -> None:
     assert called is True
     assert isinstance(result, Command)
     assert result.update["messages"][0].content == "ok"
-    assert result.update["governance_tool_calls"] == 1
 
 
 @pytest.mark.unit
@@ -116,26 +115,27 @@ async def test_write_tool_does_not_retry_a_transient_failure() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_tool_budget_blocks_handler_after_limit_is_reached() -> None:
-    calls = 0
+async def test_tool_budget_blocks_a_parallel_batch_before_handlers_run() -> None:
     guarded = middleware.GovernanceMiddleware(
         limits=middleware.RunLimits(model_calls=4, tool_calls=1),
         max_read_retries=0,
     )
-    shared_request = request("web_search")
 
-    async def handler(_request: ToolCallRequest) -> ToolMessage:
-        nonlocal calls
-        calls += 1
-        return ToolMessage(content="ok", tool_call_id="call-1")
-
-    first = await guarded.awrap_tool_call(shared_request, handler)
-    assert isinstance(first, Command)
-    shared_request.state.update(first.update)
     with pytest.raises(middleware.ToolBudgetExceeded):
-        await guarded.awrap_tool_call(shared_request, handler)
-
-    assert calls == 1
+        await guarded.aafter_model(
+            {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {"name": "first", "args": {}, "id": "call-1"},
+                            {"name": "second", "args": {}, "id": "call-2"},
+                        ],
+                    )
+                ]
+            },
+            runtime=object(),
+        )
 
 
 @pytest.mark.unit
@@ -175,6 +175,59 @@ async def test_model_budget_blocks_second_agent_model_call() -> None:
                 request_id="request-model-limit",
             ),
         )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_parallel_read_tools_share_one_governance_step() -> None:
+    calls: list[str] = []
+
+    @tool
+    async def first_lookup() -> str:
+        """Return the first value."""
+        calls.append("first")
+        return "first"
+
+    @tool
+    async def second_lookup() -> str:
+        """Return the second value."""
+        calls.append("second")
+        return "second"
+
+    agent = service.build_customer_service_agent(
+        model=ToolAwareFakeMessagesListChatModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {"name": "first_lookup", "args": {}, "id": "call-1"},
+                        {"name": "second_lookup", "args": {}, "id": "call-2"},
+                    ],
+                ),
+                AIMessage(content="完成"),
+            ]
+        ),
+        tools=(first_lookup, second_lookup),
+        checkpointer=InMemorySaver(),
+        system_prompt="专业中文客服",
+        middleware=service.build_agent_middleware(
+            limits=middleware.RunLimits(model_calls=4, tool_calls=8),
+            max_read_retries=0,
+        ),
+    )
+
+    result = await agent.ainvoke(
+        {"messages": [HumanMessage(content="并行查询")]},
+        config={"configurable": {"thread_id": "parallel-tools"}},
+        context=RuntimeContext.trusted(
+            customer_id="customer-a",
+            thread_id="parallel-tools",
+            request_id="request-parallel-tools",
+        ),
+    )
+
+    assert sorted(calls) == ["first", "second"]
+    assert result["messages"][-1].content == "完成"
 
 
 @pytest.mark.unit
