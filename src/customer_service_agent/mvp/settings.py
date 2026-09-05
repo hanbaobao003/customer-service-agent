@@ -7,6 +7,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class MvpSettings:
     deepseek_api_key: str
+    deepseek_base_url: str
     postgres_dsn: str
     mem0_dsn: str
     milvus_uri: str
@@ -20,6 +21,11 @@ class MvpSettings:
         neo4j_username, neo4j_password = _neo4j_auth(env)
         return cls(
             deepseek_api_key=deepseek_api_key,
+            deepseek_base_url=_configured_or_default(
+                env,
+                "Deepseek_BASE_URL",
+                "https://api.deepseek.com/v1",
+            ),
             postgres_dsn=_required(env, "MVP_POSTGRES_DSN"),
             mem0_dsn=_required(env, "MVP_MEM0_DSN"),
             milvus_uri=_configured_or_default(

@@ -185,6 +185,71 @@ async def test_langgraph_runner_emits_safe_citations_from_tool_artifact() -> Non
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_langgraph_runner_stops_at_persisted_order_preview() -> None:
+    class ScriptedGraph:
+        async def astream(self, _input: object, **_kwargs: object):
+            yield {
+                "model": {
+                    "messages": [
+                        AIMessage(
+                            content="",
+                            tool_calls=[
+                                {"name": "cancel_order", "args": {}, "id": "call-1"}
+                            ],
+                        )
+                    ]
+                }
+            }
+            yield {
+                "tools": {
+                    "messages": [
+                        ToolMessage(
+                            content="等待审批",
+                            tool_call_id="call-1",
+                            name="cancel_order",
+                            artifact={
+                                "approval_id": "preview-opaque-id",
+                                "operation": {
+                                    "operation_id": "operation-1",
+                                    "tool_name": "cancel_order",
+                                    "normalized_args": {"order_id": "MVP-ORDER-1001"},
+                                },
+                            },
+                        )
+                    ]
+                }
+            }
+            yield {"model": {"messages": [AIMessage(content="不应继续生成")]} }
+
+    runner = service.LangGraphAgentRunner(ScriptedGraph())
+    events = [
+        event
+        async for event in runner.stream(
+            context=RuntimeContext.trusted(
+                customer_id="customer-a",
+                thread_id="thread-1",
+                request_id="request-1",
+            ),
+            message="取消订单 MVP-ORDER-1001",
+        )
+    ]
+
+    assert [event.event_type for event in events] == [
+        EventType.TOOL_STARTED,
+        EventType.TOOL_COMPLETED,
+        EventType.APPROVAL_REQUIRED,
+    ]
+    assert events[-1].payload == {
+        "interrupt_id": "operation-1",
+        "operation_id": "operation-1",
+        "tool_name": "cancel_order",
+        "preview": {},
+        "allowed_decisions": ["approve", "reject"],
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_langgraph_runner_emits_redacted_approval_event_for_hitl_interrupt() -> None:
     @tool
     async def create_order(sku: str) -> str:

@@ -1,9 +1,11 @@
 """Concrete, minimal services used by the local portfolio MVP."""
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 import psycopg
@@ -26,6 +28,15 @@ from customer_service_agent.commerce.sql import (
 )
 from customer_service_agent.config import SQL_STATEMENT_TIMEOUT_MS
 from customer_service_agent.mvp.seed import MvpResources, _demo_vector
+from customer_service_agent.mvp.seed import _DeterministicEmbeddings, _configure_mem0_runtime
+from customer_service_agent.memory.mem0_pg import Mem0PgConfig, Mem0PgMemoryStore
+from customer_service_agent.memory.service import (
+    MemoryAuditPort,
+    MemoryPolicy,
+    MemoryService,
+    ToolEvidencePort,
+    create_memory_tools,
+)
 from customer_service_agent.retrieval.graph import (
     GraphQueryRegistry,
     Neo4jDriverAdapter,
@@ -347,6 +358,68 @@ class MvpOrderToolBundle:
     tools: tuple[object, ...]
     operations: OperationService
     commands: OrderCommandService
+
+
+class _NoVerifiedToolEvidence(ToolEvidencePort):
+    async def verified_at(self, **_: object) -> datetime | None:
+        return None
+
+
+class _NoopMemoryAudit(MemoryAuditPort):
+    async def record(self, **_: object) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class MvpMemoryToolBundle:
+    tools: tuple[object, ...]
+    memory: object
+
+
+def build_mvp_memory_tools(
+    settings: object,
+    *,
+    history_db_path: Path,
+    memory_factory: Callable[[dict[str, object]], object] | None = None,
+) -> MvpMemoryToolBundle:
+    """Build local Mem0 tools without exposing its database details to the Agent."""
+    _configure_mem0_runtime(history_db_path)
+    config = Mem0PgConfig(
+        dbname="wang_agent_mvp_mem0",
+        connection_string_ref="MVP_MEM0_DSN",
+    ).to_mem0_config(
+        connection_string=getattr(settings, "mem0_dsn"),
+        embedder_config={
+            "provider": "langchain",
+            "config": {"model": _DeterministicEmbeddings()},
+        },
+        history_db_path=str(history_db_path),
+    )
+    config["llm"] = {
+        "provider": "openai",
+        "config": {
+            "api_key": "not-used-with-infer-false",
+            "model": "not-called-with-infer-false",
+            "openai_base_url": "http://127.0.0.1:9/v1",
+        },
+    }
+    if memory_factory is None:
+        from mem0 import AsyncMemory
+
+        memory_factory = AsyncMemory.from_config
+    memory = memory_factory(config)
+    service = MemoryService(
+        store=Mem0PgMemoryStore(memory),
+        policy=MemoryPolicy(),
+        tool_evidence=_NoVerifiedToolEvidence(),
+        audit=_NoopMemoryAudit(),
+        clock=lambda: datetime.now(UTC),
+        id_generator=lambda: str(uuid4()),
+    )
+    return MvpMemoryToolBundle(
+        tools=tuple(create_memory_tools(service)),
+        memory=memory,
+    )
 
 
 def build_mvp_order_tools(settings: object) -> MvpOrderToolBundle:

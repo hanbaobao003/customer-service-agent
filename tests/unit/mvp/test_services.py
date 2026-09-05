@@ -5,6 +5,7 @@ import pytest
 from customer_service_agent.mvp.services import (
     MvpRetrievalService,
     MvpSqlGenerator,
+    build_mvp_memory_tools,
     build_mvp_order_tools,
 )
 from customer_service_agent.retrieval.hybrid import ParentDocument, SearchHit
@@ -189,3 +190,22 @@ def test_order_tool_bundle_exposes_one_read_and_four_preview_tools() -> None:
         "cancel_order",
         "request_return",
     }
+
+
+@pytest.mark.unit
+def test_memory_tool_bundle_uses_isolated_pgvector_configuration(tmp_path) -> None:
+    captured: list[dict[str, object]] = []
+    settings = type("Settings", (), {"mem0_dsn": "postgresql://memory"})()
+
+    bundle = build_mvp_memory_tools(
+        settings,
+        history_db_path=tmp_path / "history.db",
+        memory_factory=lambda config: captured.append(config) or object(),
+    )
+
+    assert {tool.name for tool in bundle.tools} == {
+        "remember_preference",
+        "list_memories",
+        "forget_memory",
+    }
+    assert captured[0]["vector_store"]["config"]["dbname"] == "wang_agent_mvp_mem0"

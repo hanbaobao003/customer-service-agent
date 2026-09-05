@@ -127,8 +127,11 @@ class LangGraphAgentRunner:
         )
         try:
             async for update in stream:
-                for event in self._events_from_update(update, sequencer, started_at):
+                events = self._events_from_update(update, sequencer, started_at)
+                for event in events:
                     yield event
+                if any(event.event_type is EventType.APPROVAL_REQUIRED for event in events):
+                    return
         except (ModelBudgetExceeded, ToolBudgetExceeded):
             yield sequencer.emit(
                 EventType.HANDOFF_REQUIRED,
@@ -198,6 +201,13 @@ class LangGraphAgentRunner:
                     events.extend(
                         LangGraphAgentRunner._citation_events(item.artifact, sequencer)
                     )
+                    events.extend(
+                        LangGraphAgentRunner._preview_approval_events(
+                            item.artifact,
+                            item.name,
+                            sequencer,
+                        )
+                    )
         interrupts = update.get("__interrupt__")
         if isinstance(interrupts, tuple):
             for interrupt in interrupts:
@@ -209,6 +219,38 @@ class LangGraphAgentRunner:
                     )
                 )
         return tuple(events)
+
+    @staticmethod
+    def _preview_approval_events(
+        artifact: object,
+        tool_name: str | None,
+        sequencer: EventSequencer,
+    ) -> tuple[AppEvent, ...]:
+        if not isinstance(artifact, dict) or not isinstance(tool_name, str):
+            return ()
+        operation = artifact.get("operation")
+        if not isinstance(operation, dict):
+            return ()
+        operation_id = operation.get("operation_id")
+        operation_tool_name = operation.get("tool_name")
+        if (
+            not isinstance(operation_id, str)
+            or not operation_id
+            or operation_tool_name != tool_name
+        ):
+            return ()
+        return (
+            sequencer.emit(
+                EventType.APPROVAL_REQUIRED,
+                {
+                    "interrupt_id": operation_id,
+                    "operation_id": operation_id,
+                    "tool_name": tool_name,
+                    "preview": {},
+                    "allowed_decisions": ["approve", "reject"],
+                },
+            ),
+        )
 
     @staticmethod
     def _citation_events(

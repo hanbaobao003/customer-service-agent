@@ -43,6 +43,20 @@ def test_settings_uses_local_docker_defaults_for_milvus_and_neo4j() -> None:
     assert settings.neo4j_uri == "neo4j://127.0.0.1:7687"
 
 
+def test_settings_uses_configured_deepseek_base_url() -> None:
+    settings = MvpSettings.from_environment(
+        {
+            "Deepseek_API_KEY": "test-key",
+            "Deepseek_BASE_URL": "https://example.invalid/v1",
+            "MVP_POSTGRES_DSN": "postgresql://demo",
+            "MVP_MEM0_DSN": "postgresql://memory",
+            "NEO4J_AUTH": "neo4j/test-password",
+        }
+    )
+
+    assert settings.deepseek_base_url == "https://example.invalid/v1"
+
+
 def test_mem0_runtime_disables_telemetry_before_initialization(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
