@@ -132,6 +132,59 @@ async def test_langgraph_runner_adapts_tool_progress_and_final_answer() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_langgraph_runner_emits_safe_citations_from_tool_artifact() -> None:
+    class ScriptedGraph:
+        async def astream(self, _input: object, **_kwargs: object):
+            yield {
+                "tools": {
+                    "messages": [
+                        ToolMessage(
+                            content="证据摘要",
+                            tool_call_id="call-1",
+                            name="search_product_faq",
+                            artifact={
+                                "citations": [
+                                    {
+                                        "id": "faq-1",
+                                        "source_id": "faq",
+                                        "locator": "warranty",
+                                        "title": "保修说明",
+                                    }
+                                ],
+                                "retrieval": {"raw_sql": "must-not-leak"},
+                            },
+                        )
+                    ]
+                }
+            }
+
+    runner = service.LangGraphAgentRunner(ScriptedGraph())
+    events = [
+        event
+        async for event in runner.stream(
+            context=RuntimeContext.trusted(
+                customer_id="customer-a",
+                thread_id="thread-1",
+                request_id="request-1",
+            ),
+            message="保修多久",
+        )
+    ]
+
+    assert [event.event_type for event in events] == [
+        EventType.TOOL_COMPLETED,
+        EventType.CITATION,
+    ]
+    assert events[-1].payload == {
+        "id": "faq-1",
+        "source_id": "faq",
+        "locator": "warranty",
+        "title": "保修说明",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_langgraph_runner_emits_redacted_approval_event_for_hitl_interrupt() -> None:
     @tool
     async def create_order(sku: str) -> str:

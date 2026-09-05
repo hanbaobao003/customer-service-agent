@@ -195,6 +195,9 @@ class LangGraphAgentRunner:
                             },
                         )
                     )
+                    events.extend(
+                        LangGraphAgentRunner._citation_events(item.artifact, sequencer)
+                    )
         interrupts = update.get("__interrupt__")
         if isinstance(interrupts, tuple):
             for interrupt in interrupts:
@@ -205,6 +208,29 @@ class LangGraphAgentRunner:
                         started_at,
                     )
                 )
+        return tuple(events)
+
+    @staticmethod
+    def _citation_events(
+        artifact: object,
+        sequencer: EventSequencer,
+    ) -> tuple[AppEvent, ...]:
+        if not isinstance(artifact, dict):
+            return ()
+        citations = artifact.get("citations")
+        if not isinstance(citations, list):
+            return ()
+        events: list[AppEvent] = []
+        for citation in citations:
+            if not isinstance(citation, dict):
+                continue
+            payload = {
+                key: citation[key]
+                for key in ("id", "source_id", "locator", "title")
+                if isinstance(citation.get(key), str) and citation[key]
+            }
+            if set(payload) == {"id", "source_id", "locator", "title"}:
+                events.append(sequencer.emit(EventType.CITATION, payload))
         return tuple(events)
 
     @staticmethod
