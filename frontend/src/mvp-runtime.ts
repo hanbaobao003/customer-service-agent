@@ -35,11 +35,108 @@ export type Fetcher = typeof fetch;
 
 export const APPROVAL_TOOL_NAME = "confirm_order_operation";
 
+export type ToolActivity = {
+  id: string;
+  name: string;
+  status: string;
+  durationMs?: number;
+};
+
+export type CitationActivity = {
+  sourceId: string;
+  title: string;
+  locator?: string;
+};
+
+export type ActivityState = {
+  tools: ToolActivity[];
+  citations: CitationActivity[];
+  notice?: string;
+};
+
+export type BackendStatus = "ready" | "degraded" | "offline";
+
 type AdapterOptions = {
   session: MvpSession;
   onEvent: MvpEventSink;
   fetcher?: Fetcher;
 };
+
+export function createSession(
+  customerId: MvpSession["customerId"],
+  idFactory: () => string = () => crypto.randomUUID(),
+): MvpSession {
+  return { customerId, threadId: `${customerId}-${idFactory()}` };
+}
+
+export function emptyActivity(): ActivityState {
+  return { tools: [], citations: [] };
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
+}
+
+export function reduceActivity(state: ActivityState, event: MvpEvent): ActivityState {
+  if (event.event_type === "tool.started") {
+    const id = requiredString(event.payload.tool_call_id);
+    return {
+      ...state,
+      tools: [
+        ...state.tools.filter((tool) => tool.id !== id),
+        { id, name: requiredString(event.payload.tool_name), status: "running" },
+      ],
+    };
+  }
+  if (event.event_type === "tool.completed") {
+    const id = requiredString(event.payload.tool_call_id);
+    const completed = {
+      id,
+      name: requiredString(event.payload.tool_name),
+      status: optionalString(event.payload.status) ?? "complete",
+      ...(typeof event.payload.duration_ms === "number"
+        ? { durationMs: event.payload.duration_ms }
+        : {}),
+    };
+    return {
+      ...state,
+      tools: [...state.tools.filter((tool) => tool.id !== id), completed],
+    };
+  }
+  if (event.event_type === "citation") {
+    const citation = {
+      sourceId: requiredString(event.payload.source_id),
+      title: optionalString(event.payload.title) ?? "知识来源",
+      ...(optionalString(event.payload.locator)
+        ? { locator: optionalString(event.payload.locator) }
+        : {}),
+    };
+    return { ...state, citations: [...state.citations, citation] };
+  }
+  if (event.event_type === "handoff.required") {
+    return { ...state, notice: "需要人工客服继续处理本次请求。" };
+  }
+  if (event.event_type === "error") {
+    return { ...state, notice: publicEventError(event) };
+  }
+  return state;
+}
+
+export async function checkBackendHealth(
+  fetcher: Fetcher = fetch,
+  signal?: AbortSignal,
+): Promise<BackendStatus> {
+  try {
+    const response = await fetcher("/health/ready", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal,
+    });
+    return response.ok ? "ready" : "degraded";
+  } catch {
+    return "offline";
+  }
+}
 
 function parseFrame(frame: string): MvpEvent | undefined {
   const lines = frame.split("\n");

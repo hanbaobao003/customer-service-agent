@@ -9,9 +9,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   APPROVAL_TOOL_NAME,
+  checkBackendHealth,
   createMvpAdapter,
+  createSession,
+  emptyActivity,
   postMvpEvents,
   readMvpEvents,
+  reduceActivity,
   type MvpEvent,
   type MvpEventType,
 } from "./mvp-runtime";
@@ -172,7 +176,7 @@ describe("postMvpEvents", () => {
   it("does not expose a failed response body", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response("database password=secret", { status: 503 }));
+      .mockResolvedValue(new Response("INTERNAL_BODY_SENTINEL", { status: 503 }));
 
     const consume = async () => {
       for await (const _event of postMvpEvents(
@@ -187,7 +191,7 @@ describe("postMvpEvents", () => {
     };
 
     await expect(consume()).rejects.toThrow("后端请求失败（503）");
-    await expect(consume()).rejects.not.toThrow("secret");
+    await expect(consume()).rejects.not.toThrow("INTERNAL_BODY_SENTINEL");
   });
 });
 
@@ -304,5 +308,66 @@ describe("createMvpAdapter", () => {
       type: "text",
       text: "订单操作已处理",
     });
+  });
+});
+
+describe("local demo view state", () => {
+  it("creates a new customer-scoped thread id", () => {
+    expect(createSession("demo-customer-b", () => "uuid-2")).toEqual({
+      customerId: "demo-customer-b",
+      threadId: "demo-customer-b-uuid-2",
+    });
+  });
+
+  it("reduces tool lifecycle by call id", () => {
+    const started = reduceActivity(
+      emptyActivity(),
+      event("tool.started", { tool_call_id: "c-1", tool_name: "get_order" }),
+    );
+    const completed = reduceActivity(
+      started,
+      event("tool.completed", {
+        tool_call_id: "c-1",
+        tool_name: "get_order",
+        status: "success",
+        duration_ms: 12,
+      }),
+    );
+
+    expect(completed.tools).toEqual([
+      { id: "c-1", name: "get_order", status: "success", durationMs: 12 },
+    ]);
+  });
+
+  it("retains only public citation fields", () => {
+    const cited = reduceActivity(
+      emptyActivity(),
+      event("citation", {
+        source_id: "faq-1",
+        title: "保修说明",
+        locator: "第 1 节",
+        score: 0.99,
+        raw_sql: "SECRET",
+      }),
+    );
+
+    expect(cited.citations).toEqual([
+      { sourceId: "faq-1", title: "保修说明", locator: "第 1 节" },
+    ]);
+    expect(JSON.stringify(cited)).not.toContain("SECRET");
+    expect(JSON.stringify(cited)).not.toContain("0.99");
+  });
+
+  it.each([
+    [new Response('{"status":"ready"}', { status: 200 }), "ready"],
+    [new Response('{"status":"not_ready"}', { status: 503 }), "degraded"],
+  ])("maps backend readiness without exposing dependency details", async (response, expected) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response);
+    await expect(checkBackendHealth(fetcher)).resolves.toBe(expected);
+  });
+
+  it("reports an unreachable backend as offline", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("connection refused"));
+    await expect(checkBackendHealth(fetcher)).resolves.toBe("offline");
   });
 });
