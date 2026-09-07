@@ -100,6 +100,25 @@ def test_project_prompt_catalog_renders_the_approved_raptor_template() -> None:
 
 
 @pytest.mark.unit
+def test_project_agent_prompt_prefers_conversation_history_before_tools() -> None:
+    catalog = service.PromptCatalog.from_path(PROJECT_ROOT / "config" / "prompts.yaml")
+
+    rendered = service.build_agent_prompt(
+        catalog,
+        context=RuntimeContext.trusted(
+            customer_id="customer-a",
+            thread_id="thread-1",
+            request_id="request-1",
+        ),
+        tool_policy="仅使用已注册工具。",
+    )
+
+    assert "能直接根据当前会话历史回答的问题，不调用任何工具" in rendered.system
+    assert "只有用户明确要求查看长期记忆时，才调用 list_memories" in rendered.system
+    assert "每次只选择完成当前任务所需的最少工具" in rendered.system
+
+
+@pytest.mark.unit
 def test_agent_prompt_uses_anonymous_context_not_customer_identity() -> None:
     catalog = service.PromptCatalog.from_path(PROJECT_ROOT / "config" / "prompts.yaml")
 

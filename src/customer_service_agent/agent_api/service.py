@@ -81,7 +81,11 @@ class LangGraphAgentRunner:
         message: str,
     ) -> AsyncIterator[AppEvent]:
         async for event in self._stream_events(
-            {"messages": [HumanMessage(content=message)]},
+            {
+                "messages": [HumanMessage(content=message)],
+                "governance_model_calls": 0,
+                "governance_tool_calls": 0,
+            },
             context,
         ):
             yield event
@@ -125,13 +129,37 @@ class LangGraphAgentRunner:
             context=context,
             stream_mode="updates",
         )
+        pending_preview_approvals: list[AppEvent] = []
         try:
             async for update in stream:
+                if pending_preview_approvals:
+                    # Drain without creating more public events: approval is terminal.
+                    continue
                 events = self._events_from_update(update, sequencer, started_at)
+                is_graph_interrupt = (
+                    isinstance(update, dict)
+                    and isinstance(update.get("__interrupt__"), tuple)
+                )
+                preview_approvals = [
+                    event
+                    for event in events
+                    if event.event_type is EventType.APPROVAL_REQUIRED
+                    and not is_graph_interrupt
+                ]
+                if preview_approvals:
+                    for event in events:
+                        if event not in preview_approvals:
+                            yield event
+                    pending_preview_approvals.extend(preview_approvals)
+                    continue
                 for event in events:
                     yield event
-                if any(event.event_type is EventType.APPROVAL_REQUIRED for event in events):
+                if is_graph_interrupt and any(
+                    event.event_type is EventType.APPROVAL_REQUIRED for event in events
+                ):
                     return
+            for event in pending_preview_approvals:
+                yield event
         except (ModelBudgetExceeded, ToolBudgetExceeded):
             yield sequencer.emit(
                 EventType.HANDOFF_REQUIRED,

@@ -3,7 +3,6 @@ import type {
   ChatModelRunResult,
   ThreadAssistantMessagePart,
   ThreadMessage,
-  ToolCallMessagePart,
 } from "@assistant-ui/react";
 
 export type MvpEventType =
@@ -231,7 +230,6 @@ function latestUserText(messages: readonly ThreadMessage[]): string {
 type DecidedApproval = {
   interruptId: string;
   approved: boolean;
-  part: ToolCallMessagePart;
 };
 
 function findDecidedApproval(message: ThreadMessage): DecidedApproval | undefined {
@@ -245,7 +243,6 @@ function findDecidedApproval(message: ThreadMessage): DecidedApproval | undefine
       return {
         interruptId: part.approval.id,
         approved: part.approval.approved,
-        part,
       };
     }
   }
@@ -298,7 +295,6 @@ export function createMvpAdapter(options: AdapterOptions): ChatModelAdapter {
             ...(!decided.approved ? { reason: "用户拒绝本次操作" } : {}),
           }
         : { message: latestUserText(messages) };
-      const preserved: ThreadAssistantMessagePart[] = decided ? [decided.part] : [];
       let text = "";
 
       for await (const event of postMvpEvents(
@@ -324,7 +320,7 @@ export function createMvpAdapter(options: AdapterOptions): ChatModelAdapter {
 
         if (text) {
           yield {
-            content: [...preserved, { type: "text", text }],
+            content: [{ type: "text", text }],
           } satisfies ChatModelRunResult;
         }
       }

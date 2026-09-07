@@ -1,5 +1,7 @@
 # assistant-ui 本地演示前端 Implementation Plan
 
+**Status:** Implemented and verified on 2026-09-07. TDD evidence: `docs/tdd/records/m7-assistant-ui-frontend.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 为现有 FastAPI + LangChain 智能客服后端增加一个可在本地面试演示的 assistant-ui React 聊天界面。

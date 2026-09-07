@@ -9,6 +9,7 @@ from typing import Literal
 import psycopg
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
+from langchain_core.messages import AIMessage
 from pymilvus import MilvusClient
 
 from customer_service_agent.agent_api.api import (
@@ -115,6 +116,12 @@ class MvpAgentRunner:
             decision=decision,
         )
         text = _decision_message(decision, result)
+        if self._graph_session_factory is not None:
+            async with self._graph_session_factory() as graph:
+                await graph.aupdate_state(
+                    {"configurable": {"thread_id": context.thread_id}},
+                    {"messages": [AIMessage(content=text)]},
+                )
         events = EventSequencer(thread_id=context.thread_id, request_id=context.request_id)
         yield events.emit(EventType.MESSAGE_DELTA, {"text": text})
         yield events.emit(

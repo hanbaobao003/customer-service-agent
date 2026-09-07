@@ -1,20 +1,28 @@
 # 本地 Demo 验收手册
 
-本项目有两种演示：真实 MVP 浏览器版用于作品集展示；确定性 mock Agent 用于离线 SSE 契约验证。两者的接口一致，但数据源和副作用不同。
+本项目有两种演示：真实浏览器版用于体验完整客服流程；确定性 mock Agent 用于离线 SSE 契约验证。两者的接口一致，但数据源和副作用不同。
 
-## 真实 MVP 浏览器版
+## 真实浏览器版
 
-在项目 worktree 中执行：
+在项目根目录执行：
 
 ```bash
-PYTHONPATH=src uv run --env-file /Users/danny/Documents/wang-agent/.env \
+PYTHONPATH=src uv run --env-file .env \
   python -m customer_service_agent.mvp.seed
-PYTHONPATH=src uv run --env-file /Users/danny/Documents/wang-agent/.env \
+PYTHONPATH=src uv run --env-file .env \
   python -m uvicorn customer_service_agent.mvp.app:create_mvp_app_from_environment \
   --factory --host 127.0.0.1 --port 8001
 ```
 
-在浏览器打开 `http://127.0.0.1:8001/`，选择“客户 A”，依次输入：
+另开一个终端启动前端：
+
+```bash
+cd /Users/danny/Documents/wang-agent/.worktrees/mvp-complete/frontend
+npm install
+npm run dev
+```
+
+在浏览器打开 `http://127.0.0.1:5173/`，看到“后端就绪”后选择“客户 A”，依次输入：
 
 | 输入 | 展示能力 |
 |---|---|
@@ -26,6 +34,10 @@ PYTHONPATH=src uv run --env-file /Users/danny/Documents/wang-agent/.env \
 | `取消订单 MVP-ORDER-1001，原因是不想要了` | `cancel_order` 预览 → 页面确认 → PostgreSQL 幂等执行。 |
 | `请长期记住我偏好简洁中文回答` | `remember_preference` → 本地 Mem0 PGVector。 |
 | `查看我的记忆` | `list_memories` → 客户隔离的记忆列表。 |
+
+建议按“知识检索 → 订单查询 → 审批拒绝 → 记忆隔离”的顺序展示。取消订单时模型可能先追问原因，回答`不想要了，请继续取消`即可看到审批卡片。首次展示建议点击“拒绝”，确认页面返回“订单状态未改变”；若点击“批准执行”，再次运行 seed 可恢复演示订单。
+
+切换到“客户 B”会自动创建新线程。输入`查询订单 MVP-ORDER-1001`或`查看我的记忆`，可展示订单和记忆不会跨客户泄漏。切回客户 A 同样会创建新线程，但长期记忆仍按 `customer_id` 从 PostgreSQL 召回。
 
 订单写操作只会先显示确认按钮；未确认不会改变订单。为重复演示取消订单，可重新执行 seed 或改用创建订单、修改收货信息、退货申请场景。
 

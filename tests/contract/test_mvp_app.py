@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 import pytest
 
 from customer_service_agent.mvp import app as mvp_app
@@ -89,3 +91,51 @@ async def test_mvp_runner_executes_a_persisted_approval_by_operation_id() -> Non
         EventType.MESSAGE_COMPLETED,
     ]
     assert events[-1].payload["message"] == "订单操作已完成：MVP-ORDER-1001（cancelled）。"
+
+
+@pytest.mark.contract
+@pytest.mark.asyncio
+async def test_mvp_runner_records_decision_in_the_agent_checkpoint() -> None:
+    class Coordinator:
+        async def execute_approved(self, _context, *, operation_id, decision):
+            assert operation_id == "operation-1"
+            assert decision == "reject"
+            return {"order_id": "MVP-ORDER-1001", "status": "paid"}
+
+    class Graph:
+        def __init__(self) -> None:
+            self.updates = []
+
+        async def aupdate_state(self, config, values):
+            self.updates.append((config, values))
+
+    graph = Graph()
+
+    @asynccontextmanager
+    async def graph_session():
+        yield graph
+
+    runner = MvpAgentRunner(
+        graph_factory=lambda: None,
+        coordinator=Coordinator(),
+        graph_session_factory=graph_session,
+    )
+    context = RuntimeContext.trusted(
+        customer_id="demo-customer-a",
+        thread_id="thread-1",
+        request_id="request-1",
+    )
+
+    _ = [
+        event
+        async for event in runner.resume(
+            context=context,
+            interrupt_id="operation-1",
+            decision="reject",
+            reason="用户拒绝本次操作",
+        )
+    ]
+
+    assert graph.updates[0][0] == {"configurable": {"thread_id": "thread-1"}}
+    decision_message = graph.updates[0][1]["messages"][0]
+    assert decision_message.content == "已取消本次订单操作，订单状态未改变。"

@@ -75,7 +75,11 @@ async def test_write_tool_waits_for_approval_then_resumes_same_thread() -> None:
 @pytest.mark.asyncio
 async def test_langgraph_runner_adapts_tool_progress_and_final_answer() -> None:
     class ScriptedGraph:
-        async def astream(self, _input: object, **_kwargs: object):
+        def __init__(self) -> None:
+            self.agent_input = None
+
+        async def astream(self, agent_input: object, **_kwargs: object):
+            self.agent_input = agent_input
             yield {
                 "model": {
                     "messages": [
@@ -101,7 +105,8 @@ async def test_langgraph_runner_adapts_tool_progress_and_final_answer() -> None:
             }
             yield {"model": {"messages": [AIMessage(content="订单已创建。")]}}
 
-    runner = service.LangGraphAgentRunner(ScriptedGraph())
+    graph = ScriptedGraph()
+    runner = service.LangGraphAgentRunner(graph)
     events = [
         event
         async for event in runner.stream(
@@ -128,6 +133,8 @@ async def test_langgraph_runner_adapts_tool_progress_and_final_answer() -> None:
         "citations": [],
         "usage_summary": {},
     }
+    assert graph.agent_input["governance_model_calls"] == 0
+    assert graph.agent_input["governance_tool_calls"] == 0
 
 
 @pytest.mark.unit
@@ -187,6 +194,9 @@ async def test_langgraph_runner_emits_safe_citations_from_tool_artifact() -> Non
 @pytest.mark.asyncio
 async def test_langgraph_runner_stops_at_persisted_order_preview() -> None:
     class ScriptedGraph:
+        def __init__(self) -> None:
+            self.finished = False
+
         async def astream(self, _input: object, **_kwargs: object):
             yield {
                 "model": {
@@ -220,8 +230,10 @@ async def test_langgraph_runner_stops_at_persisted_order_preview() -> None:
                 }
             }
             yield {"model": {"messages": [AIMessage(content="不应继续生成")]} }
+            self.finished = True
 
-    runner = service.LangGraphAgentRunner(ScriptedGraph())
+    graph = ScriptedGraph()
+    runner = service.LangGraphAgentRunner(graph)
     events = [
         event
         async for event in runner.stream(
@@ -239,6 +251,7 @@ async def test_langgraph_runner_stops_at_persisted_order_preview() -> None:
         EventType.TOOL_COMPLETED,
         EventType.APPROVAL_REQUIRED,
     ]
+    assert graph.finished is True
     assert events[-1].payload == {
         "interrupt_id": "operation-1",
         "operation_id": "operation-1",

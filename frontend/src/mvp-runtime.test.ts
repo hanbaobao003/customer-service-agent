@@ -304,10 +304,12 @@ describe("createMvpAdapter", () => {
       "/v1/threads/t-1/decisions",
       expect.objectContaining({ body: JSON.stringify(expectedBody) }),
     );
-    expect(output.at(-1)?.content).toContainEqual({
-      type: "text",
-      text: "订单操作已处理",
-    });
+    expect(output.at(-1)?.content).toEqual([
+      { type: "text", text: "订单操作已处理" },
+    ]);
+    expect(output.at(-1)?.content).not.toContainEqual(
+      expect.objectContaining({ toolCallId: "interrupt-1" }),
+    );
   });
 });
 
