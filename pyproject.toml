@@ -1,0 +1,48 @@
+[project]
+name = "customer-service-agent"
+version = "0.1.0"
+description = "A spec-driven customer service agent built with LangChain."
+requires-python = "==3.13.*"
+dependencies = [
+    "fastapi>=0.116,<1",
+    "langchain==1.3.18",
+    "langchain-openai>=1.1,<2",
+    "langgraph==1.2.11",
+    "langgraph-checkpoint-postgres>=3.1.2",
+    "langsmith>=0.11,<1",
+    "mem0ai==2.0.19",
+    "neo4j-graphrag==1.19.0",
+    "psycopg[binary,pool]>=3.2,<4",
+    "pymilvus==3.0.1",
+    "pyyaml==6.0.2",
+    "sqlglot>=27,<30",
+    "uvicorn>=0.30,<1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<10",
+    "pytest-asyncio>=1.0,<2",
+    "pytest-socket>=0.7,<1",
+    "ruff>=0.14,<1",
+]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+    "unit: fast tests without external systems",
+    "contract: schema, ASGI, SSE, and port contract tests",
+    "integration_postgres: PostgreSQL, checkpointer, and pgvector integration tests",
+    "integration_milvus: Milvus retrieval and indexing integration tests",
+    "integration_neo4j: Neo4j import and graph query integration tests",
+    "live_model: opt-in real model tests",
+    "live_web: opt-in Tavily tests",
+    "live_embedding: opt-in real embedding and reranking tests",
+    "live_langsmith: opt-in LangSmith tests",
+    "eval_gate: fixed evaluation dataset and release gate tests",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

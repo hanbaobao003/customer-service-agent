@@ -1,0 +1,21 @@
+name: wang-agent-neo4j
+
+services:
+  neo4j:
+    image: neo4j:2026.07.1
+    container_name: wang-agent-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:?Set NEO4J_AUTH in the project .env file}
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+
+volumes:
+  neo4j_data:
+    name: wang-agent-neo4j-data
+  neo4j_logs:
+    name: wang-agent-neo4j-logs
